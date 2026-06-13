@@ -13,6 +13,7 @@ import { AudioTab } from './AudioTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
+import { ensureAudio, setMasterVolume, playForScore, playTier, MusicCue, MusicTier } from './musicEngine';
 import { PlannerView } from './PlannerView';
 
 const BREAK_NUDGES = [
@@ -124,6 +125,9 @@ const App = () => {
   const [audioUnlocked, setAudioUnlocked] = useState(true);
   const [vibe, setVibe] = useState<VibeState>({ score: null, vibe: 'idle', errorsCount: 0, warningsCount: 0, fileName: '' });
 
+  // Last score-reactive music phrase that played (synthesized live, see musicEngine).
+  const [musicCue, setMusicCue] = useState<MusicCue | null>(null);
+
   // Latest playSFX event, surfaced to the Mascot. nonce makes repeats re-trigger.
   const [sfx, setSfx] = useState<{ kind: string; nonce: number } | null>(null);
 
@@ -175,6 +179,10 @@ const App = () => {
         case 'promptReviewResult':
           setReview(message.value);
           setPromptLoading(false);
+          // Play a synthesized phrase that matches how good the prompt scored.
+          if (typeof message.value?.score === 'number') {
+            setMusicCue(playForScore(message.value.score));
+          }
           break;
         case 'changeReviewResult':
           setChangeReview(message.value);
@@ -206,6 +214,8 @@ const App = () => {
 
   useEffect(() => {
     if (backgroundAudioRef.current) backgroundAudioRef.current.volume = volume * (muted ? 0 : 1);
+    // Keep the synthesized score-music at the same level as the rest of the audio.
+    setMasterVolume(volume, muted);
   }, [volume, muted]);
 
   // Background loop cross-fade on vibe change
@@ -252,6 +262,9 @@ const App = () => {
 
   const handleReviewPrompt = () => {
     if (!prompt.trim()) return;
+    // This click is our user gesture — unlock Web Audio now so the score phrase can
+    // play the moment the review returns. Also sync the master volume on first start.
+    ensureAudio().then(() => setMasterVolume(volume, muted)).catch(() => {});
     setPromptLoading(true);
     setError('');
     setReview(null);
@@ -483,7 +496,19 @@ const App = () => {
           <ChangesTab changeReview={changeReview} loading={changeLoading} onReview={handleReviewChanges} />
         )}
         {activeTab === 'audio' && (
-          <AudioTab volume={volume} setVolume={setVolume} muted={muted} setMuted={setMuted} vibe={vibe} />
+          <AudioTab
+            volume={volume}
+            setVolume={setVolume}
+            muted={muted}
+            setMuted={setMuted}
+            vibe={vibe}
+            musicCue={musicCue}
+            onPreviewTier={(tier: MusicTier) => {
+              ensureAudio()
+                .then(() => { setMasterVolume(volume, muted); setMusicCue(playTier(tier)); })
+                .catch(() => {});
+            }}
+          />
         )}
       </motion.div>
 
