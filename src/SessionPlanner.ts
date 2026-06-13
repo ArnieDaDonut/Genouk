@@ -46,8 +46,7 @@ Respond ONLY with a valid JSON object matching this schema:
   ]
 }`;
 
-    const query = `${systemPrompt}\n\nUser's Coding Goal:\n${goal}`;
-    const resultText = await ai.generateContent(query);
+    const resultText = await ai.generateContent(`User's Coding Goal:\n${goal}`, systemPrompt);
 
     try {
       const cleaned = resultText.replace(/```json/g, '').replace(/```/g, '').trim();

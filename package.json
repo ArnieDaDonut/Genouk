@@ -50,6 +50,25 @@
           "default": "",
           "description": "Your Groq API key for Jarvis AI.",
           "markdownDescription": "Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
+        },
+        "jarvis.model": {
+          "type": "string",
+          "default": "llama-3.3-70b-versatile",
+          "description": "Groq model used for prompt and change review."
+        },
+        "jarvis.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 256,
+          "maximum": 32768,
+          "description": "Maximum tokens the model may use for a single review response."
+        },
+        "jarvis.temperature": {
+          "type": "number",
+          "default": 0.4,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature for reviews. Lower is more focused and deterministic."
         }
       }
     }

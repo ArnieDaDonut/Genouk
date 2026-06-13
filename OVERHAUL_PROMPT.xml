@@ -1,0 +1,153 @@
+<overhaul_prompt>
+
+  <role>
+    You are a senior product engineer and UI designer. You are taking over a VS Code
+    extension called "Genouk" (internally "jarvis") that reviews a developer's prompts
+    and git diffs using an LLM, and surfaces the results in a webview panel with an
+    animated sprite mascot. The project currently works but feels weak and "vibe coded."
+    Your job is to make the feedback genuinely useful and the UI genuinely good.
+    Do not ship surface-level changes. Read the code first, then act.
+  </role>
+
+  <prime_directive>
+    Before writing a single line, READ THE ACTUAL CODE and make educated guesses about
+    intent. Do not ask the user clarifying questions you could answer yourself by reading
+    the repo. Where the code is ambiguous, infer the most likely intended behavior from
+    naming, surrounding code, and product context, state your assumption in one line, and
+    proceed. Bias toward action grounded in evidence over speculation.
+  </prime_directive>
+
+  <context>
+    <stack>
+      <item>VS Code extension, TypeScript. Extension host code in src/, webview UI in src/webviews/jarvis-app/index.tsx (React + framer-motion, single giant file with inline styles).</item>
+      <item>LLM access is centralized in src/AIProvider.ts: Groq SDK, model "llama-3.3-70b-versatile", max_tokens 1024, single user-role message (no system role used), no temperature set.</item>
+      <item>Two reviewers call generateContent(): src/PromptReviewer.ts (rewrites a user prompt to be token-efficient, returns JSON) and src/ChangeReviewer.ts (reviews `git diff` output, returns free text).</item>
+      <item>SessionPlanner.ts and JarvisSidebarProvider.ts wire tabs ('prompts' | 'session' | 'changes' | 'audio') and post messages between webview and host.</item>
+      <item>The webview renders an animated sprite mascot ("genouk"), speech bubbles, a holographic floor ring, tabs, a prompt textarea, score bars, and token badges.</item>
+    </stack>
+  </context>
+
+  <problems>
+    <problem id="weak-feedback" severity="high">
+      The reviewer feedback is shallow and generic. PromptReviewer's system prompt only
+      says "rewrite to be concise and token-efficient" — it never reads the user's
+      codebase, never asks what the prompt is actually trying to accomplish, and never
+      makes educated guesses about the developer's real intent. The result is bland advice
+      that any spellchecker could give. ChangeReviewer is similarly generic ("check for
+      bugs, edge cases, best practices") with no project context and no severity ranking.
+    </problem>
+    <problem id="no-context-awareness" severity="high">
+      Neither reviewer is given any signal about the repository it is running in: no file
+      tree, no language, no framework, no nearby code, no recent commits. The LLM is
+      therefore forced to answer in a vacuum. Feedback should be informed by the actual
+      project so it can make educated guesses (e.g. "this prompt targets a React component
+      — you probably also want X").
+    </problem>
+    <problem id="token-cap" severity="medium">
+      max_tokens is 1024 and there is no system role, no temperature, and no model
+      configurability. Strong feedback frequently needs more room and a system/user split.
+    </problem>
+    <problem id="vibe-coded-ui" severity="high">
+      The webview looks vibe coded: one 1400+ line file, hundreds of inline style objects,
+      hardcoded hex colors mixed with VS Code theme vars, gimmicky copy ("GRID SYSTEM
+      SECURE", "VIBE FEEDBACK ACTIVE"), inconsistent spacing/typography, and decorative
+      effects (neon glows, floor rings) standing in for actual visual hierarchy. It reads
+      as a demo, not a product.
+    </problem>
+  </problems>
+
+  <goals>
+    <goal>Make prompt feedback specific, opinionated, and actionable — it should name the
+      weakness, explain why it matters, and show the fix, not just restate the prompt.</goal>
+    <goal>Make both reviewers context-aware: feed them real repository signal and instruct
+      them to make educated guesses about intent rather than answering in a vacuum.</goal>
+    <goal>Redesign the webview so it looks like a deliberate product: consistent design
+      tokens, real visual hierarchy, VS Code theme integration, restrained motion.</goal>
+    <goal>Keep the genouk mascot and its personality — make it feel intentional, not
+      gimmicky.</goal>
+  </goals>
+
+  <instructions>
+    <feedback_quality>
+      <item>Rewrite the PromptReviewer system prompt so it does three things: (1) infers
+        what the user is actually trying to get the downstream LLM to do, (2) flags the
+        specific weaknesses (ambiguity, missing constraints, missing output format, missing
+        context, unverifiable success criteria) with a one-line "why it matters" each, and
+        (3) returns the improved prompt PLUS a short, blunt critique. Keep the existing JSON
+        schema (score, feedback, improvedPrompt, tokenIssues, estimatedOriginalTokens,
+        estimatedImprovedTokens, isFinished) so the webview keeps working — strengthen the
+        content, not the contract.</item>
+      <item>Make the critique stronger: scores should be earned and the feedback should be
+        willing to say a prompt is bad and exactly why. Avoid hedging and praise padding.</item>
+      <item>For ChangeReviewer, instruct the model to rank findings by severity
+        (blocker / warning / nit), tie each to a specific file/hunk in the diff, and make an
+        educated guess about the intent of the change before critiquing it.</item>
+    </feedback_quality>
+
+    <context_injection>
+      <item>Before calling the LLM, gather lightweight repo context and pass it in: the
+        workspace's primary language(s), key config files (package.json name + deps), a
+        shallow file tree, and — for prompt review — the currently open/active file's
+        content or selection if available. Keep it within a token budget; truncate large
+        files.</item>
+      <item>Explicitly tell the model in the prompt: "Use this repository context to make
+        educated guesses about the developer's intent. State assumptions briefly, then give
+        precise feedback."</item>
+      <item>In AIProvider, add a system/user message split and make model, max_tokens, and
+        temperature configurable (settings: jarvis.model, jarvis.maxTokens). Raise the
+        default max_tokens enough for substantive feedback.</item>
+    </context_injection>
+
+    <ui_redesign>
+      <item>Extract a small design-token layer (colors, spacing scale, radii, typography,
+        motion durations) and reference VS Code theme variables first, with sensible
+        fallbacks. Stop scattering raw hex values through inline styles.</item>
+      <item>Establish real hierarchy: clear primary action, secondary actions, quiet
+        metadata. The prompt input and its result should be the visual center of the
+        'prompts' tab.</item>
+      <item>Replace gimmick copy ("GRID SYSTEM SECURE", "VIBE FEEDBACK ACTIVE") with honest,
+        product-grade labels. Keep genouk's personality in the speech bubbles, not in
+        system chrome.</item>
+      <item>Tone down decorative effects: motion should reinforce state changes (loading,
+        result-arrived, hover), not run constantly. Keep the mascot's idle float, drop
+        effects that don't communicate anything.</item>
+      <item>Improve the result presentation: the score, token savings, and findings should
+        be scannable at a glance with consistent badges and spacing. Make loading and error
+        states first-class, not afterthoughts.</item>
+      <item>Where practical, break the 1400-line webview into a few focused components
+        (Mascot, PromptTab, ChangesTab, ScoreBar, TokenBadge) without changing the
+        message-passing contract with the host.</item>
+    </ui_redesign>
+  </instructions>
+
+  <constraints>
+    <item>Do not break the webview<->host message contract (types like 'reviewPrompt',
+      'reviewChanges', 'promptReviewResult', 'changeReviewResult') unless you update both
+      sides consistently.</item>
+    <item>Preserve the PromptReviewResult interface fields the UI already consumes.</item>
+    <item>Keep Groq as the provider; the only AIProvider changes are system/user split and
+      configurability. Do not add new external dependencies without justification.</item>
+    <item>Respect VS Code theming — the panel must look correct in both light and dark
+      themes.</item>
+    <item>Make educated guesses instead of asking the user; only surface a question if a
+      decision is genuinely unrecoverable from the code.</item>
+  </constraints>
+
+  <deliverables>
+    <item>Updated AIProvider.ts with system/user split + configurable model/tokens/temp.</item>
+    <item>Updated PromptReviewer.ts and ChangeReviewer.ts with context-aware, opinionated,
+      educated-guess prompts (same output contracts).</item>
+    <item>A context-gathering helper used by both reviewers.</item>
+    <item>A redesigned webview with a design-token layer, real hierarchy, honest copy,
+      restrained motion, and first-class loading/error states.</item>
+    <item>A short note (3-6 bullets) listing the assumptions you made and why.</item>
+  </deliverables>
+
+  <success_criteria>
+    <item>A reviewer's feedback names a concrete weakness, explains why it matters, and
+      shows the fix — and references something real about the project.</item>
+    <item>A new engineer opening the webview reads it as a finished product, not a demo.</item>
+    <item>No regressions in the tab navigation or the prompt/diff review round-trips.</item>
+  </success_criteria>
+
+</overhaul_prompt>
