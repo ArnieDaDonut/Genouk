@@ -27,6 +27,8 @@ interface MascotProps {
   walkSignal?: number;
   /** Double-click shortcut into the prompt review. */
   onDoubleActivate?: () => void;
+  /** True while codebase tour is actively running. */
+  tourPlaying?: boolean;
 }
 
 // Set to true if the walk sprite is drawn facing LEFT (so it faces the
@@ -81,10 +83,11 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   perk: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate, tourPlaying }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
+  const tourSpriteUrl = window.PET_TOUR_SPRITE || '';
   const reduced = useReducedMotion();
 
   // 'walking' -> entrance; 'arrived' -> resting/reacting.
@@ -376,8 +379,9 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
           : null);
   const bubbleVisible = phase === 'arrived' && !!bubbleText;
 
-  const useWalkSheet = phase === 'walking' || strolling;
-  const spriteUrl = useWalkSheet ? walkSpriteUrl : waveSpriteUrl;
+  const useWalkSheet = phase === 'walking';
+  const useTourSheet = strolling || (tourPlaying && phase === 'arrived' && !!say);
+  const spriteUrl = useWalkSheet ? walkSpriteUrl : (useTourSheet ? tourSpriteUrl : waveSpriteUrl);
   const col = currentFrame % columns;
   const row = Math.floor(currentFrame / columns);
   const bgPosX = -(col * displayWidth);

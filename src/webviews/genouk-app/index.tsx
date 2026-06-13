@@ -426,6 +426,7 @@ const App = () => {
         errand={errand}
         say={mascotSay}
         walkSignal={walkSignal}
+        tourPlaying={tourPlaying}
         onDoubleActivate={() => {
           setActiveTab('prompts');
           handleReviewPrompt();

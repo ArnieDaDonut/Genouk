@@ -384,6 +384,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
+    const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
 
     const nonce = getNonce();
 
@@ -404,6 +405,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           window.PET_VIDEO = "${videoUri}";
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
+          window.PET_TOUR_SPRITE = "${tourSpriteUri}";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;
