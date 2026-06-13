@@ -113,6 +113,12 @@ const App = () => {
   const [audioUnlocked, setAudioUnlocked] = useState(true);
   const [vibe, setVibe] = useState<VibeState>({ score: null, vibe: 'idle', errorsCount: 0, warningsCount: 0, fileName: '' });
 
+  // Latest playSFX event, surfaced to the Mascot. nonce makes repeats re-trigger.
+  const [sfx, setSfx] = useState<{ kind: string; nonce: number } | null>(null);
+
+  // A review the user just triggered — sends Genouk over to "press" that button.
+  const [errand, setErrand] = useState<{ kind: string; nonce: number } | null>(null);
+
   const [error, setError] = useState('');
 
   const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -137,6 +143,7 @@ const App = () => {
           setVibe(message.value);
           break;
         case 'playSFX': {
+          setSfx({ kind: message.value, nonce: Date.now() });
           const url = audioUrisRef.current[message.value];
           if (url && sfxAudioRef.current) {
             sfxAudioRef.current.src = url;
@@ -231,6 +238,7 @@ const App = () => {
     setPromptLoading(true);
     setError('');
     setReview(null);
+    setErrand({ kind: 'reviewPrompt', nonce: Date.now() });
     vscode.postMessage({ type: 'reviewPrompt', value: prompt });
   };
 
@@ -238,6 +246,7 @@ const App = () => {
     setChangeLoading(true);
     setError('');
     setChangeReview('');
+    setErrand({ kind: 'reviewChanges', nonce: Date.now() });
     vscode.postMessage({ type: 'reviewChanges' });
   };
 
@@ -246,6 +255,7 @@ const App = () => {
     setSessionLoading(true);
     setError('');
     setSessionPlan(null);
+    setErrand({ kind: 'generateSession', nonce: Date.now() });
     vscode.postMessage({ type: 'generateSessionPlan', value: goal });
   };
 
@@ -396,7 +406,20 @@ const App = () => {
         )}
       </motion.div>
 
-      <Mascot say={mascotSay} />
+      <Mascot
+        vibe={vibe}
+        thinking={promptLoading || changeLoading || sessionLoading}
+        review={review}
+        changeReview={changeReview}
+        sessionPlan={sessionPlan}
+        sfx={sfx}
+        errand={errand}
+        say={mascotSay}
+        onDoubleActivate={() => {
+          setActiveTab('prompts');
+          handleReviewPrompt();
+        }}
+      />
     </div>
   );
 };

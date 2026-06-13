@@ -94,7 +94,7 @@ export const ChangesTab: React.FC<Props> = ({ changeReview, loading, onReview })
         <p style={{ margin: '4px 0 10px', fontSize: t.font.size.base, color: t.color.muted, lineHeight: 1.4 }}>
           Reviews your working-tree diff against HEAD and ranks findings by severity.
         </p>
-        <PrimaryButton onClick={onReview} disabled={loading} busy={loading}>
+        <PrimaryButton id="genouk-btn-reviewChanges" onClick={onReview} disabled={loading} busy={loading}>
           {!loading && <Search size={14} />}
           {loading ? 'Reviewing diff…' : 'Review changes'}
         </PrimaryButton>
