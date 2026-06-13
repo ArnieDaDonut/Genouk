@@ -1,9 +1,9 @@
 {
-  "name": "jarvis",
+  "name": "genouk",
   "displayName": "Genouk",
-  "description": "Jarvis AI Assistant for prompt engineering and review",
+  "description": "Genouk AI Assistant for prompt engineering and review",
   "version": "0.0.1",
-  "publisher": "jarvis-dev",
+  "publisher": "genouk-dev",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -13,7 +13,7 @@
     "Machine Learning"
   ],
   "keywords": [
-    "jarvis",
+    "genouk",
     "AI",
     "prompt",
     "review"
@@ -28,22 +28,51 @@
         "command": "genouk.openPlanner",
         "title": "Genouk: Open Planner Window",
         "icon": "$(window)"
+      },
+      {
+        "command": "genouk.syncTodosToLinear",
+        "title": "Genouk: Sync TODOs in Active File to Linear",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "genouk.tourNext",
+        "title": "Genouk: Live Tour Next Stop",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "genouk.tourPrevious",
+        "title": "Genouk: Live Tour Previous Stop",
+        "icon": "$(arrow-left)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "genouk.tourNext",
+        "key": "right",
+        "mac": "right",
+        "when": "editorTextFocus && genouk.liveTour"
+      },
+      {
+        "command": "genouk.tourPrevious",
+        "key": "left",
+        "mac": "left",
+        "when": "editorTextFocus && genouk.liveTour"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "jarvis-sidebar",
+          "id": "genouk-sidebar",
           "title": "Genouk",
           "icon": "$(robot)"
         }
       ]
     },
     "views": {
-      "jarvis-sidebar": [
+      "genouk-sidebar": [
         {
           "type": "webview",
-          "id": "jarvis.sidebar",
+          "id": "genouk.sidebar",
           "name": "Genouk",
           "icon": "$(robot)"
         }
@@ -52,41 +81,52 @@
     "configuration": {
       "title": "Genouk",
       "properties": {
-        "jarvis.groqApiKey": {
+        "genouk.groqApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Groq API key for Jarvis AI.",
+          "description": "Your Groq API key for Genouk AI.",
           "markdownDescription": "Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
         },
-        "jarvis.model": {
+        "genouk.model": {
           "type": "string",
           "default": "llama-3.3-70b-versatile",
           "description": "Groq model used for prompt and change review."
         },
-        "jarvis.geminiApiKey": {
+        "genouk.geminiApiKey": {
           "type": "string",
           "default": "",
           "description": "Your Google Gemini API key — used as a free fallback when Groq is rate-limited.",
           "markdownDescription": "Free fallback provider. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
         },
-        "jarvis.geminiModel": {
+        "genouk.geminiModel": {
           "type": "string",
           "default": "gemini-2.0-flash",
           "description": "Gemini model used as the fallback (gemini-2.0-flash is free and fast)."
         },
-        "jarvis.maxTokens": {
+        "genouk.maxTokens": {
           "type": "number",
           "default": 4096,
           "minimum": 256,
           "maximum": 32768,
           "description": "Maximum tokens the model may use for a single review response."
         },
-        "jarvis.temperature": {
+        "genouk.temperature": {
           "type": "number",
           "default": 0.4,
           "minimum": 0,
           "maximum": 2,
           "description": "Sampling temperature for reviews. Lower is more focused and deterministic."
+        },
+        "genouk.linearApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Linear Personal API Key.",
+          "markdownDescription": "Used to sync your session tasks to Linear. Generate one at [linear.app/settings/api](https://linear.app/settings/api)."
+        },
+        "genouk.linearTeamId": {
+          "type": "string",
+          "default": "",
+          "description": "Your Linear Team ID (or Team Key, e.g., ENG) where tasks will be created."
         }
       }
     }
@@ -110,6 +150,10 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "@google/genai": "^2.8.0",
+    "@google/generative-ai": "^0.14.0",
+    "@linear/sdk": "^86.0.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
     "groq-sdk": "^1.2.1",

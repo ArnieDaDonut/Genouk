@@ -4,10 +4,11 @@ import { ChangeReviewer } from './ChangeReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
+import { LinearService } from './LinearService';
 import { getNonce } from './webviewHtml';
 import { log } from './log';
 
-export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
+export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
   private promptReviewer = new PromptReviewer();
   private changeReviewer = new ChangeReviewer();
@@ -124,6 +125,31 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+        case 'syncToLinear': {
+          const config = vscode.workspace.getConfiguration('genouk');
+          const apiKey = config.get<string>('linearApiKey');
+          const teamId = config.get<string>('linearTeamId');
+          
+          if (!apiKey || !teamId) {
+            vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+            break;
+          }
+
+          const plan = this._store.get();
+          if (!plan) break;
+
+          try {
+            const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
+            await this._store.set(updatedPlan);
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: true } });
+            vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
+          } catch (error: any) {
+            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+          }
+          break;
+        }
         case 'openPlanner': {
           PlannerPanel.createOrShow(this._extensionUri, this._store);
           break;
@@ -162,8 +188,24 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           log(`[webview] ${data.value}`);
           break;
         }
+        case 'setTourPlaying': {
+          await this.setTourPlaying(!!data.value);
+          break;
+        }
       }
     });
+  }
+
+  public nextTourStop() {
+    this._view?.webview.postMessage({ type: 'tourStepDelta', value: 1 });
+  }
+
+  public previousTourStop() {
+    this._view?.webview.postMessage({ type: 'tourStepDelta', value: -1 });
+  }
+
+  private async setTourPlaying(playing: boolean) {
+    await vscode.commands.executeCommand('setContext', 'genouk.liveTour', playing);
   }
 
   /** Open a workspace-relative file path in the editor (best-effort). */
@@ -367,7 +409,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
     const cmd: string = e?.execution?.commandLine?.value ?? '';
     if (!cmd) return;
     log(`Shell command finished (exit ${e.exitCode}): ${cmd}`);
-    const relevant = JarvisSidebarProvider.RUN_CMD_RE.test(cmd) || JarvisSidebarProvider.RUN_PROG_RE.test(cmd);
+    const relevant = GenoukSidebarProvider.RUN_CMD_RE.test(cmd) || GenoukSidebarProvider.RUN_PROG_RE.test(cmd);
     if (!relevant) return;
     // exitCode can be undefined if the shell couldn't report it; treat that as success.
     const failed = typeof e.exitCode === 'number' && e.exitCode !== 0;
@@ -410,13 +452,14 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
 
   private _getHtmlForWebview(webview: vscode.Webview) {
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'jarvisApp.js')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'genoukApp.js')
     );
 
     const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
     const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
+    const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
 
     const nonce = getNonce();
 
@@ -426,7 +469,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
         <meta charset="UTF-8">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; media-src ${webview.cspSource} https:; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https:;">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Jarvis Assistant</title>
+        <title>Genouk Assistant</title>
       </head>
       <body>
         <div id="root"></div>
@@ -437,6 +480,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           window.PET_VIDEO = "${videoUri}";
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
+          window.PET_TOUR_SPRITE = "${tourSpriteUri}";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;

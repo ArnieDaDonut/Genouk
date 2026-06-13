@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SessionStore } from './SessionStore';
 import { plannerHtml } from './webviewHtml';
+import { LinearService } from './LinearService';
 
 /**
  * The popout Planner. A singleton WebviewPanel opened beside the editor (and
@@ -39,7 +40,7 @@ export class PlannerPanel {
     store: SessionStore,
   ) {
     const scriptUri = panel.webview.asWebviewUri(
-      vscode.Uri.joinPath(extensionUri, 'dist', 'jarvisApp.js'),
+      vscode.Uri.joinPath(extensionUri, 'dist', 'genoukApp.js'),
     );
     panel.webview.html = plannerHtml(panel.webview, scriptUri);
 
@@ -66,6 +67,31 @@ export class PlannerPanel {
             panel.webview.postMessage({ type: 'error', value: error.message });
           }
           break;
+        case 'syncToLinear': {
+          const config = vscode.workspace.getConfiguration('genouk');
+          const apiKey = config.get<string>('linearApiKey');
+          const teamId = config.get<string>('linearTeamId');
+          
+          if (!apiKey || !teamId) {
+            vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
+            panel.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+            break;
+          }
+
+          const plan = store.get();
+          if (!plan) break;
+
+          try {
+            const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
+            await store.set(updatedPlan);
+            panel.webview.postMessage({ type: 'syncToLinearResult', value: { success: true } });
+            vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
+          } catch (error: any) {
+            panel.webview.postMessage({ type: 'error', value: error.message });
+            panel.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+          }
+          break;
+        }
       }
     }, null, this.disposables);
 

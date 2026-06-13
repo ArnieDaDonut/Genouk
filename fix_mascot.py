@@ -1,6 +1,6 @@
 import re
 
-with open('src/webviews/jarvis-app/Mascot.tsx', 'r') as f:
+with open('src/webviews/genouk-app/Mascot.tsx', 'r') as f:
     content = f.read()
 
 # First conflict
@@ -64,5 +64,5 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     content = content[:part1_head.start() - 13] + merged_1 + content[part1_remote.end():]
 
 # Read content again after first replacement
-with open('src/webviews/jarvis-app/Mascot.tsx', 'w') as f:
+with open('src/webviews/genouk-app/Mascot.tsx', 'w') as f:
     f.write(content)

@@ -2,7 +2,7 @@
 
   <role>
     You are a senior product engineer and UI designer. You are taking over a VS Code
-    extension called "Genouk" (internally "jarvis") that reviews a developer's prompts
+    extension called "Genouk" (internally "genouk") that reviews a developer's prompts
     and git diffs using an LLM, and surfaces the results in a webview panel with an
     animated sprite mascot. The project currently works but feels weak and "vibe coded."
     Your job is to make the feedback genuinely useful and the UI genuinely good.
@@ -19,7 +19,7 @@
 
   <context>
     <stack>
-      <item>VS Code extension, TypeScript. Extension host code in src/, webview UI in src/webviews/jarvis-app/index.tsx (React + framer-motion, single giant file with inline styles).</item>
+      <item>VS Code extension, TypeScript. Extension host code in src/, webview UI in src/webviews/genouk-app/index.tsx (React + framer-motion, single giant file with inline styles).</item>
       <item>LLM access is centralized in src/AIProvider.ts: Groq SDK, model "llama-3.3-70b-versatile", max_tokens 1024, single user-role message (no system role used), no temperature set.</item>
       <item>Two reviewers call generateContent(): src/PromptReviewer.ts (rewrites a user prompt to be token-efficient, returns JSON) and src/ChangeReviewer.ts (reviews `git diff` output, returns free text).</item>
       <item>SessionPlanner.ts and JarvisSidebarProvider.ts wire tabs ('prompts' | 'session' | 'changes' | 'audio') and post messages between webview and host.</item>
@@ -94,7 +94,7 @@
         educated guesses about the developer's intent. State assumptions briefly, then give
         precise feedback."</item>
       <item>In AIProvider, add a system/user message split and make model, max_tokens, and
-        temperature configurable (settings: jarvis.model, jarvis.maxTokens). Raise the
+        temperature configurable (settings: genouk.model, genouk.maxTokens). Raise the
         default max_tokens enough for substantive feedback.</item>
     </context_injection>
 

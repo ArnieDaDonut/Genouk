@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Palette, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Palette, Square, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
@@ -72,6 +72,8 @@ const App = () => {
   // Codebase tour
   const [tour, setTour] = useState<CodebaseTour | null>(null);
   const [tourLoading, setTourLoading] = useState(false);
+  const tourRef = useRef<CodebaseTour | null>(null);
+  useEffect(() => { tourRef.current = tour; }, [tour]);
 
   // Live (narrated) tour playback
   const [tourPlaying, setTourPlaying] = useState(false);
@@ -153,6 +155,8 @@ const App = () => {
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
+  const [syncingLinear, setSyncingLinear] = useState(false);
+
   // Host -> webview messages
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -217,11 +221,20 @@ const App = () => {
           setChangeReview(message.value);
           setChangeLoading(false);
           break;
+        case 'syncToLinearResult':
+          setSyncingLinear(false);
+          break;
+        case 'tourStepDelta':
+          if (typeof message.value === 'number') {
+            setTourStep((s) => Math.max(0, Math.min((tourRef.current?.stops.length ?? 0), s + message.value)));
+          }
+          break;
         case 'error':
           setError(message.value);
           setPromptLoading(false);
           setChangeLoading(false);
           setSessionLoading(false);
+          setSyncingLinear(false);
           setTourLoading(false);
           break;
       }
@@ -331,7 +344,14 @@ const App = () => {
     vscode.postMessage({ type: 'saveSessionPlan', value: plan });
   };
 
+  const handleSyncLinear = () => {
+    setSyncingLinear(true);
+    setError('');
+    vscode.postMessage({ type: 'syncToLinear' });
+  };
+
   const handleGenerateTour = (description: string) => {
+    stopLiveTour();
     setTourLoading(true);
     setError('');
     setTour(null);
@@ -339,6 +359,7 @@ const App = () => {
   };
 
   const handleResetTour = () => {
+    stopLiveTour();
     setTour(null);
   };
 
@@ -364,11 +385,13 @@ const App = () => {
     setActiveTab('tour');
     setTourStep(0);
     setTourPlaying(true);
+    vscode.postMessage({ type: 'setTourPlaying', value: true });
   };
 
   const stopLiveTour = () => {
     setTourPlaying(false);
     setActiveStop(null);
+    vscode.postMessage({ type: 'setTourPlaying', value: false });
   };
 
   // Drive the narrated tour: each step switches to the Tour tab, opens the stop's
@@ -381,6 +404,7 @@ const App = () => {
       speak("That's the whole tour — you're all caught up. 🎉");
       setTourPlaying(false);
       setActiveStop(null);
+      vscode.postMessage({ type: 'setTourPlaying', value: false });
       return;
     }
 
@@ -397,6 +421,35 @@ const App = () => {
     return () => clearTimeout(id);
   }, [tourPlaying, tourStep, tour]);
 
+  // Listen for Left / Right arrow keys to navigate stops manually.
+  useEffect(() => {
+    if (!tourPlaying || !tour || tour.stops.length === 0) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setTourStep((s) => Math.min(tour.stops.length, s + 1));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setTourStep((s) => Math.max(0, s - 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [tourPlaying, tour]);
+
+  useEffect(() => {
+    return () => {
+      vscode.postMessage({ type: 'setTourPlaying', value: false });
+    };
+  }, []);
   return (
     <div
       className="genouk-root"
@@ -466,11 +519,37 @@ const App = () => {
         say={mascotSay}
         walkSignal={walkSignal}
         accessory={personalization.accessory}
+        tourPlaying={tourPlaying}
         onDoubleActivate={() => {
+          if (tourPlaying) return;
           setActiveTab('prompts');
           handleReviewPrompt();
         }}
       />
+
+      {tourPlaying && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: t.space.md }}>
+          <button
+            onClick={stopLiveTour}
+            style={{
+              background: t.color.errorBg,
+              color: t.color.bad,
+              border: `1px solid ${t.color.errorBorder}`,
+              borderRadius: t.radius.sm,
+              padding: '6px 14px',
+              fontSize: t.font.size.xs,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: t.font.ui,
+              fontWeight: t.font.weight.semibold,
+            }}
+          >
+            <Square size={10} fill="currentColor" /> Stop Live Tour
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${t.color.border}`, marginBottom: t.space.md }}>
@@ -544,6 +623,8 @@ const App = () => {
               onGenerate={handleGenerateSession}
               onSave={handleSaveSession}
               onPopout={() => vscode.postMessage({ type: 'openPlanner' })}
+              onSyncLinear={handleSyncLinear}
+              syncingLinear={syncingLinear}
             />
           </div>
         )}
