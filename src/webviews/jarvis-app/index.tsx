@@ -13,6 +13,7 @@ import { EditorHealth } from './EditorHealth';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
+import { PlannerView } from './PlannerView';
 
 const BREAK_NUDGES = [
   'Break time! Stand up and stretch. 🧘',
@@ -378,7 +379,13 @@ const App = () => {
         {activeTab === 'session' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
             <FocusTimerCard timer={timer} onStart={startFocus} />
-            <SessionTab plan={sessionPlan} loading={sessionLoading} onGenerate={handleGenerateSession} onSave={handleSaveSession} />
+            <SessionTab
+              plan={sessionPlan}
+              loading={sessionLoading}
+              onGenerate={handleGenerateSession}
+              onSave={handleSaveSession}
+              onPopout={() => vscode.postMessage({ type: 'openPlanner' })}
+            />
           </div>
         )}
         {activeTab === 'changes' && (
@@ -395,4 +402,4 @@ const App = () => {
 };
 
 const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+root.render(window.GENOUK_VIEW === 'planner' ? <PlannerView /> : <App />);

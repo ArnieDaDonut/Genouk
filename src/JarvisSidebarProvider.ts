@@ -1,16 +1,20 @@
 import * as vscode from 'vscode';
 import { PromptReviewer } from './PromptReviewer';
 import { ChangeReviewer } from './ChangeReviewer';
-import { SessionPlanner } from './SessionPlanner';
+import { SessionStore } from './SessionStore';
+import { PlannerPanel } from './PlannerPanel';
+import { getNonce } from './webviewHtml';
 
 export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
   private promptReviewer = new PromptReviewer();
   private changeReviewer = new ChangeReviewer();
-  private sessionPlanner = new SessionPlanner();
   private _extensionUri: vscode.Uri;
 
-  constructor(private readonly _context: vscode.ExtensionContext) {
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly _store: SessionStore,
+  ) {
     this._extensionUri = _context.extensionUri;
 
     // Listeners for audio vibe events and compiler score updates
@@ -23,6 +27,10 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
         if (activeEditor && e.uris.some(uri => uri.toString() === activeEditor.document.uri.toString())) {
           this.updateDiagnosticsScore();
         }
+      }),
+      // Keep the sidebar in sync when the popout planner edits the plan.
+      this._store.onDidChange((plan) => {
+        this._view?.webview.postMessage({ type: 'sessionPlan', value: plan });
       })
     );
   }
@@ -66,23 +74,24 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'getSessionPlan': {
-          const plan = this._context.workspaceState.get('sessionPlan');
-          webviewView.webview.postMessage({ type: 'sessionPlan', value: plan || null });
+          webviewView.webview.postMessage({ type: 'sessionPlan', value: this._store.get() });
           break;
         }
         case 'saveSessionPlan': {
-          await this._context.workspaceState.update('sessionPlan', data.value);
+          await this._store.set(data.value);
           break;
         }
         case 'generateSessionPlan': {
           if (!data.value) return;
           try {
-            const plan = await this.sessionPlanner.generateSessionPlan(data.value);
-            await this._context.workspaceState.update('sessionPlan', plan);
-            webviewView.webview.postMessage({ type: 'sessionPlan', value: plan });
+            await this._store.generate(data.value);
           } catch (error: any) {
             webviewView.webview.postMessage({ type: 'error', value: error.message });
           }
+          break;
+        }
+        case 'openPlanner': {
+          PlannerPanel.createOrShow(this._extensionUri, this._store);
           break;
         }
       }
@@ -222,14 +231,5 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
       </body>
       </html>`;
   }
-}
-
-function getNonce() {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
 }
 
