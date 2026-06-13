@@ -17,6 +17,7 @@ export interface GenerateOptions {
 
 const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_VULTR_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
 
@@ -33,10 +34,10 @@ interface ResolvedOptions {
 }
 
 /**
- * Single entry point for all model calls. It keeps an ordered list of free
+ * Single entry point for all model calls. It keeps an ordered list of
  * providers and falls through to the next one whenever a call fails (rate
- * limits, outages, missing keys). Groq is primary (fast, generous free tier);
- * Google Gemini is the free fallback. Callers are unchanged — they still call
+ * limits, outages, missing keys). Order: Vultr (if configured) → Groq →
+ * Google Gemini. Callers are unchanged — they still call
  * `getInstance().generateContent(...)`.
  */
 export class AIProvider {
@@ -59,6 +60,16 @@ export class AIProvider {
   private async providers(): Promise<Provider[]> {
     const config = vscode.workspace.getConfiguration('genouk');
     const list: Provider[] = [];
+
+    const vultrKey = await getSecret('vultr');
+    if (vultrKey) {
+      const key = vultrKey;
+      const vultrModel = config.get<string>('vultrModel') || process.env.VULTR_MODEL || DEFAULT_VULTR_MODEL;
+      list.push({
+        name: 'Vultr',
+        generate: (userContent, systemContent, opts) => callVultr(key, vultrModel, userContent, systemContent, opts),
+      });
+    }
 
     const groqKey = await getSecret('groq');
     if (groqKey) {
@@ -117,7 +128,7 @@ export class AIProvider {
     const providers = await this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a free Groq or Gemini key.',
+        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a Vultr, Groq, or Gemini key.',
       );
     }
 
@@ -146,6 +157,49 @@ function shorten(msg: string): string {
   const m = /"message"\s*:\s*"([^"]+)"/.exec(msg);
   const text = m ? m[1] : msg;
   return text.length > 200 ? text.slice(0, 200) + '…' : text;
+}
+
+/**
+ * Call Vultr Serverless Inference. Its chat API is OpenAI-compatible, so a plain
+ * fetch is all we need — no SDK. Endpoint and auth per Vultr's inference docs.
+ */
+async function callVultr(
+  apiKey: string,
+  model: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const messages: { role: 'system' | 'user'; content: string }[] = [];
+  if (systemContent) messages.push({ role: 'system', content: systemContent });
+  messages.push({ role: 'user', content: userContent });
+
+  const res = await fetch('https://api.vultrinference.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: opts.maxTokens,
+      temperature: opts.temperature,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Vultr ${res.status}: ${await res.text()}`);
+  }
+
+  // Some Vultr-hosted models are reasoning models: when the final answer is
+  // short they may leave `content` null and put text under `reasoning`. Fall
+  // back to it so we never return an empty string from a successful call.
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string | null; reasoning?: string | null } }[];
+  };
+  const msg = data.choices?.[0]?.message;
+  return msg?.content ?? msg?.reasoning ?? '';
 }
 
 /**

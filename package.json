@@ -86,6 +86,17 @@
     "configuration": {
       "title": "Genouk",
       "properties": {
+        "genouk.vultrApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Fallback Vultr Serverless Inference API key. Prefer the \"Genouk: Set API Key\" command, which stores it in the OS keychain instead of plaintext settings.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a key from the [Vultr Inference dashboard](https://my.vultr.com/inference/). When set, Vultr is the primary provider."
+        },
+        "genouk.vultrModel": {
+          "type": "string",
+          "default": "",
+          "description": "Vultr inference model id (e.g. deepseek-ai/DeepSeek-V4-Flash). Leave blank to use the VULTR_MODEL env var or the built-in default."
+        },
         "genouk.groqApiKey": {
           "type": "string",
           "default": "",
