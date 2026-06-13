@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import Groq from 'groq-sdk';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 export class AIProvider {
   private static instance: AIProvider;
@@ -22,7 +26,8 @@ export class AIProvider {
   }
 
   private initialize() {
-    const apiKey = vscode.workspace.getConfiguration('jarvis').get<string>('groqApiKey');
+    const apiKey = vscode.workspace.getConfiguration('jarvis').get<string>('groqApiKey')
+      || process.env.GROQ_API_KEY;
     if (apiKey) {
       this.client = new Groq({ apiKey });
     } else {
