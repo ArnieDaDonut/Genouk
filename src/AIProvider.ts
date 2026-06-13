@@ -26,7 +26,7 @@ export class AIProvider {
     const apiKey = vscode.workspace.getConfiguration('jarvis').get<string>('geminiApiKey');
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+      this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
     } else {
       this.genAI = undefined;
       this.model = undefined;
@@ -35,7 +35,7 @@ export class AIProvider {
 
   public async generateContent(prompt: string): Promise<string> {
     if (!this.model) {
-      throw new Error('Gemini API key is not configured. Please add it in settings.');
+      throw new Error('Gemini API key is not configured. Please add it in settings (jarvis.geminiApiKey).');
     }
     const result = await this.model.generateContent(prompt);
     return result.response.text();

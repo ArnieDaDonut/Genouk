@@ -73,6 +73,7 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@google/generative-ai": "^0.14.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.360.0",
