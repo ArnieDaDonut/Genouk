@@ -90,3 +90,4 @@ npm run dev      # esbuild watch mode
 
 Only `dist/extension.js` and `dist/jarvisApp.js` are loaded by the editor. The
 bundle is kept lean by marking `vscode` external and avoiding heavy SDKs.
+

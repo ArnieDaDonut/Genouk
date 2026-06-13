@@ -17,6 +17,8 @@ export interface GenerateOptions {
 
 const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
+const DEFAULT_VULTR_MODEL = 'llama-2-70b-chat-Q5_K_M';
+const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
 
@@ -35,19 +37,25 @@ interface ResolvedOptions {
 /**
  * Single entry point for all model calls. It keeps an ordered list of free
  * providers and falls through to the next one whenever a call fails (rate
- * limits, outages, missing keys). Groq is primary (fast, generous free tier);
- * Google Gemini is the free fallback. Callers are unchanged — they still call
+ * limits, outages, missing keys). Vultr is primary; Groq and Gemini are
+ * fallbacks. Callers are unchanged - they still call
  * `getInstance().generateContent(...)`.
  */
 export class AIProvider {
   private static instance: AIProvider;
+  private vultrKey?: string;
   private groq?: Groq;
   private geminiKey?: string;
 
   private constructor() {
     this.initialize();
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('genouk.groqApiKey') || e.affectsConfiguration('genouk.geminiApiKey')) {
+      if (
+        e.affectsConfiguration('genouk.vultrApiKey') ||
+        e.affectsConfiguration('genouk.vultrModel') ||
+        e.affectsConfiguration('genouk.groqApiKey') ||
+        e.affectsConfiguration('genouk.geminiApiKey')
+      ) {
         this.initialize();
       }
     });
@@ -63,6 +71,8 @@ export class AIProvider {
   private initialize() {
     const config = vscode.workspace.getConfiguration('genouk');
 
+    this.vultrKey = readSecret(process.env.VULTR_API_KEY) || readSecret(config.get<string>('vultrApiKey'));
+
     const groqKey = config.get<string>('groqApiKey') || process.env.GROQ_API_KEY;
     // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
     // the Retry-After header — bumped from the default 2 so a brief rate-limit
@@ -76,6 +86,16 @@ export class AIProvider {
   private providers(): Provider[] {
     const config = vscode.workspace.getConfiguration('genouk');
     const list: Provider[] = [];
+
+    if (this.vultrKey) {
+      const key = this.vultrKey;
+      const vultrModel = readConfig(process.env.VULTR_MODEL) || readConfig(config.get<string>('vultrModel')) || DEFAULT_VULTR_MODEL;
+      list.push({
+        name: 'Vultr',
+        generate: (userContent, systemContent, opts) =>
+          callVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
+      });
+    }
 
     if (this.groq) {
       const groq = this.groq;
@@ -129,7 +149,7 @@ export class AIProvider {
     const providers = this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Add a free Groq key (genouk.groqApiKey) or Gemini key (genouk.geminiApiKey) in settings.',
+        'No AI provider is configured. Add a Vultr key (genouk.vultrApiKey), Groq key (genouk.groqApiKey), or Gemini key (genouk.geminiApiKey) in settings.',
       );
     }
 
@@ -139,7 +159,10 @@ export class AIProvider {
     for (const provider of providers) {
       try {
         const text = await provider.generate(userContent, systemContent, opts);
-        if (text.trim()) return text;
+        if (text.trim()) {
+          log(`AI provider used: ${provider.name}`);
+          return text;
+        }
         failures.push(`${provider.name}: empty response`);
         log(`${provider.name} returned an empty response.`);
       } catch (err) {
@@ -161,6 +184,55 @@ function shorten(msg: string): string {
   const m = /"message"\s*:\s*"([^"]+)"/.exec(msg);
   const text = m ? m[1] : msg;
   return text.length > 200 ? text.slice(0, 200) + '…' : text;
+}
+
+function readConfig(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/^['"]|['"]$/g, '');
+}
+
+function readSecret(value: string | undefined): string | undefined {
+  return readConfig(value)?.replace(/^Bearer\s+/i, '');
+}
+
+/**
+ * Call Vultr Serverless Inference via its OpenAI-compatible chat completions API.
+ * Keeping this as a direct fetch avoids adding another SDK to the extension bundle.
+ */
+async function callVultr(
+  apiKey: string,
+  model: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const messages: { role: 'system' | 'user'; content: string }[] = [];
+  if (systemContent) messages.push({ role: 'system', content: systemContent });
+  messages.push({ role: 'user', content: userContent });
+
+  const res = await fetch(`${VULTR_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: opts.maxTokens,
+      temperature: opts.temperature,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Vultr ${res.status}: ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  return data.choices?.[0]?.message?.content ?? '';
 }
 
 /**

@@ -81,6 +81,16 @@
     "configuration": {
       "title": "Genouk",
       "properties": {
+        "genouk.vultrApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Vultr Serverless Inference API key (primary provider)."
+        },
+        "genouk.vultrModel": {
+          "type": "string",
+          "default": "llama-2-70b-chat-Q5_K_M",
+          "description": "Vultr inference model ID."
+        },
         "genouk.groqApiKey": {
           "type": "string",
           "default": "",
