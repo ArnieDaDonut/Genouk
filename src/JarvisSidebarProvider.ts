@@ -15,13 +15,16 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   private _extensionUri: vscode.Uri;
 
   // Spotlight used by the live tour to highlight a symbol; cleared on a timer.
+  // Deliberately bold: whole-line warm wash, a thick accent bar in the gutter,
+  // and a full-height marker on the overview ruler so it's impossible to miss.
   private readonly tourHighlight = vscode.window.createTextEditorDecorationType({
-    backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
-    border: '1px solid',
-    borderColor: new vscode.ThemeColor('editor.findMatchHighlightBorder'),
-    borderRadius: '2px',
-    overviewRulerColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
-    overviewRulerLane: vscode.OverviewRulerLane.Center,
+    isWholeLine: true,
+    backgroundColor: 'rgba(255, 184, 0, 0.20)',
+    borderWidth: '0 0 0 4px',
+    borderStyle: 'solid',
+    borderColor: new vscode.ThemeColor('focusBorder'),
+    overviewRulerColor: 'rgba(255, 184, 0, 0.9)',
+    overviewRulerLane: vscode.OverviewRulerLane.Full,
   });
   private highlightClearTimer?: ReturnType<typeof setTimeout>;
 

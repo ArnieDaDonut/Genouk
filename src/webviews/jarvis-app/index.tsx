@@ -404,6 +404,23 @@ const App = () => {
         </div>
       </div>
 
+      {/* Genouk character — docked at the top so he's front and centre */}
+      <Mascot
+        vibe={vibe}
+        thinking={promptLoading || changeLoading || sessionLoading}
+        review={review}
+        changeReview={changeReview}
+        sessionPlan={sessionPlan}
+        sfx={sfx}
+        errand={errand}
+        say={mascotSay}
+        walkSignal={walkSignal}
+        onDoubleActivate={() => {
+          setActiveTab('prompts');
+          handleReviewPrompt();
+        }}
+      />
+
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${t.color.border}`, marginBottom: t.space.md }}>
         {TABS.map(({ id, label, Icon }) => {
@@ -511,22 +528,6 @@ const App = () => {
           />
         )}
       </motion.div>
-
-      <Mascot
-        vibe={vibe}
-        thinking={promptLoading || changeLoading || sessionLoading}
-        review={review}
-        changeReview={changeReview}
-        sessionPlan={sessionPlan}
-        sfx={sfx}
-        errand={errand}
-        say={mascotSay}
-        walkSignal={walkSignal}
-        onDoubleActivate={() => {
-          setActiveTab('prompts');
-          handleReviewPrompt();
-        }}
-      />
     </div>
   );
 };
