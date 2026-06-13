@@ -121,13 +121,29 @@ const ChromaVideo: React.FC<ChromaVideoProps> = ({ src, onEnded, onError }) => {
 const App = () => {
   const images = window.PET_IMAGES || [];
   const videoUrl = window.PET_VIDEO || '';
+  const walkSpriteUrl = window.PET_WALK_SPRITE || '';
 
   const [greetingText, setGreetingText] = useState(greetings[0]);
   const [greetingVisible, setGreetingVisible] = useState(false);
-  const [animationState, setAnimationState] = useState<'idle' | 'spin' | 'jump' | 'wave'>('idle');
   const [isHovered, setIsHovered] = useState(false);
   const [videoActive, setVideoActive] = useState(!!videoUrl);
   const [showRobot, setShowRobot] = useState(!videoUrl);
+
+  // Animation controller states
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [fps, setFps] = useState(12);
+  const [currentFrame, setCurrentFrame] = useState(0);
+
+  // Sprite dimensions
+  const frameWidth = 128;
+  const frameHeight = 128;
+  const columns = 5;
+  const frameCount = 25;
+  
+  // Display scale — bigger = larger sprite on screen
+  const displayScale = 2.5;
+  const displayWidth = frameWidth * displayScale;
+  const displayHeight = frameHeight * displayScale;
 
   // Show the greeting bubble and handle timer after the robot has faded in
   useEffect(() => {
@@ -140,54 +156,34 @@ const App = () => {
     }
   }, [showRobot]);
 
+  // Handle animation loop
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = 1000 / fps;
+    const timer = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frameCount);
+    }, interval);
+    return () => clearInterval(timer);
+  }, [isPlaying, fps]);
+
   // Trigger a reaction on click
   const handleRobotClick = () => {
-    // Pick a random animation (spin, jump, wave)
-    const states: ('spin' | 'jump' | 'wave')[] = ['spin', 'jump', 'wave'];
-    const nextState = states[Math.floor(Math.random() * states.length)];
-    setAnimationState(nextState);
-
     // Pick a random greeting
     const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
     setGreetingText(randomGreeting);
     setGreetingVisible(true);
   };
 
-  // Define motion animation variants
-  const robotVariants = {
-    idle: {
-      y: [0, -10, 0],
-      rotate: [0, -1.5, 1.5, -1.5, 1.5, 0],
-      transition: {
-        y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
-        rotate: { duration: 4, repeat: Infinity, ease: 'easeInOut' },
-      },
-    },
-    hover: {
-      scale: 1.06,
-      y: [0, -16, 0],
-      rotate: [0, -3, 3, -3, 3, 0],
-      transition: {
-        y: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-        rotate: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
-      },
-    },
-    spin: {
-      rotate: 360,
-      scale: [1, 1.15, 0.9, 1],
-      transition: { duration: 0.6, ease: 'easeInOut' },
-    },
-    jump: {
-      y: [0, -45, 10, -5, 0],
-      scaleY: [1, 0.75, 1.25, 0.9, 1],
-      transition: { duration: 0.8, ease: 'easeInOut' },
-    },
-    wave: {
-      rotate: [0, -12, 8, -12, 8, 0],
-      scale: [1, 1.05, 1],
-      transition: { duration: 0.8, ease: 'easeInOut' },
-    },
-  };
+  const col = currentFrame % columns;
+  const row = Math.floor(currentFrame / columns);
+
+  // CSS background-image sprite approach: position the sheet so only the target frame shows.
+  // bgPos offsets move the sheet left/up to reveal the correct column/row.
+  const bgPosX = -(col * displayWidth);
+  const bgPosY = -(row * displayHeight);
+  // background-size must be the full scaled sheet dimensions
+  const bgSizeW = columns * displayWidth;           // 5 cols × 192px = 960px
+  const bgSizeH = (frameCount / columns) * displayHeight; // 5 rows × 192px = 960px
 
   return (
     <div style={{
@@ -201,6 +197,8 @@ const App = () => {
       background: 'transparent',
       fontFamily: 'var(--vscode-font-family, system-ui, -apple-system, sans-serif)',
       position: 'relative',
+      padding: '16px 8px',
+      boxSizing: 'border-box',
     }}>
       {/* Soft background pulse glow */}
       <motion.div
@@ -216,11 +214,12 @@ const App = () => {
           background: 'radial-gradient(circle, var(--vscode-button-background, #007acc) 0%, rgba(0,0,0,0) 70%)',
           pointerEvents: 'none',
           zIndex: 0,
+          top: '60px',
         }}
       />
 
       {/* Speech bubble */}
-      <div style={{ height: '70px', display: 'flex', alignItems: 'flex-end', marginBottom: '16px', zIndex: 2 }}>
+      <div style={{ height: '70px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px', zIndex: 2 }}>
         <AnimatePresence mode="wait">
           {greetingVisible && showRobot && (
             <motion.div
@@ -257,16 +256,17 @@ const App = () => {
         </AnimatePresence>
       </div>
 
-      {/* Content Container (holds either the Video or the Robot) */}
+      {/* Content Container (holds either the Video or the Sprite Robot) */}
       <div style={{
         position: 'relative',
         width: '95%',
         maxWidth: '280px',
-        height: '280px',
+        height: '340px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1,
+        marginBottom: '10px',
       }}>
         <AnimatePresence>
           {videoActive && (
@@ -313,39 +313,31 @@ const App = () => {
               }}
             >
               <motion.div
-                animate={animationState !== 'idle' ? animationState : (isHovered ? 'hover' : 'idle')}
-                variants={robotVariants}
-                onAnimationComplete={() => {
-                  if (animationState !== 'idle') {
-                    setAnimationState('idle');
-                  }
+                animate={{
+                  y: [0, -8, 0],
+                }}
+                transition={{
+                  y: { duration: 3, repeat: Infinity, ease: 'easeInOut' },
                 }}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 onClick={handleRobotClick}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
+                  // Viewport: exactly one frame wide and tall
+                  width: `${displayWidth}px`,
+                  height: `${displayHeight}px`,
+                  flexShrink: 0,
                   cursor: 'pointer',
                   userSelect: 'none',
+                  // CSS background-image sprite: crop to one frame via background-position
+                  backgroundImage: walkSpriteUrl ? `url('${walkSpriteUrl}')` : 'none',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: `${bgSizeW}px ${bgSizeH}px`,
+                  backgroundPosition: `${bgPosX}px ${bgPosY}px`,
+                  imageRendering: 'pixelated',
+                  filter: 'drop-shadow(0 8px 12px rgba(0,0,0,0.3))',
                 }}
-              >
-                {images.length > 0 && (
-                  <img
-                    src={images[0]}
-                    alt="Genouk Pet"
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      filter: 'drop-shadow(0 10px 16px rgba(0,0,0,0.35)) contrast(1.05)',
-                    }}
-                  />
-                )}
-              </motion.div>
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -362,9 +354,7 @@ const App = () => {
           width: '130px',
           height: '12px',
           background: 'radial-gradient(ellipse, var(--vscode-button-background, #007acc) 0%, rgba(0,0,0,0) 75%)',
-          borderRadius: '50%',
-          filter: 'blur(1px)',
-          marginTop: '12px',
+          marginBottom: '12px',
           zIndex: 0,
         }}
       />

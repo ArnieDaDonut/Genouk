@@ -23,6 +23,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
 
     const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
     const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
+    const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
 
     const nonce = getNonce();
 
@@ -41,6 +42,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
             "${petUri}"
           ];
           window.PET_VIDEO = "${videoUri}";
+          window.PET_WALK_SPRITE = "${walkSpriteUri}";
         </script>
         <script nonce="${nonce}" src="${scriptUri}"></script>
       </body>
