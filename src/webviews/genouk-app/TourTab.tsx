@@ -54,11 +54,10 @@ const StopRow: React.FC<{ stop: TourStop; index: number; onOpenFile: (f: string)
   const [open, setOpen] = useState(index === 0);
   const ref = useRef<HTMLDivElement>(null);
 
-  // While the live tour is on this stop, force it open and scroll it into view.
+  // While the live tour is on this stop, force it open.
   useEffect(() => {
     if (active) {
       setOpen(true);
-      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [active]);
 

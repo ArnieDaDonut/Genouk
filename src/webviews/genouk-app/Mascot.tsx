@@ -83,9 +83,21 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   perk: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
+const completed = (status: string) => status === 'completed';
+
+const vibeBank = (vibe: string): QuipBank => {
+  if (vibe === 'chill' || vibe === 'fire' || vibe === 'worried' || vibe === 'chaos') {
+    return vibe;
+  }
+  return 'idle';
+};
+
+const pressButton = (button: HTMLElement) => {
+  button.click();
+};
+
 export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate, tourPlaying }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
-  const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
   const tourSpriteUrl = window.PET_TOUR_SPRITE || '';
   const reduced = useReducedMotion();
