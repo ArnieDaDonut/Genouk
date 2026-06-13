@@ -47,7 +47,7 @@ Estimate token counts as words * 1.3 (the UI recomputes these from the actual te
 "tokenIssues" must be specific, concrete findings (e.g. 'No target file named — model must guess where this React component lives'), not generic advice.
 "isFinished" is true only when the prompt is already strong (score >= 90) and needs no rewrite.
 
-Reply with ONLY a valid JSON object, no markdown fences:
+Reply with ONLY a valid JSON object, ,fmdsf smdf s,mf s,dno markdown fences:
 {"score":number,"feedback":"string","improvedPrompt":"string","tokenIssues":["string"],"suggestions":["string"],"estimatedOriginalTokens":number,"estimatedImprovedTokens":number,"isFinished":boolean}`;
 
 export class PromptReviewer {

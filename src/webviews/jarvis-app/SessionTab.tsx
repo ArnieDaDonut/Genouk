@@ -53,7 +53,7 @@ export const SessionTab: React.FC<Props> = ({ plan, loading, onGenerate, onSave 
           placeholder="e.g. Add JWT auth with middleware and persist the active session…"
           style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
         />
-        <PrimaryButton onClick={() => onGenerate(goal)} disabled={!goal.trim()} style={{ marginTop: t.space.sm }}>
+        <PrimaryButton id="genouk-btn-generateSession" onClick={() => onGenerate(goal)} disabled={!goal.trim()} style={{ marginTop: t.space.sm }}>
           <ListTodo size={14} /> Generate plan
         </PrimaryButton>
       </Card>

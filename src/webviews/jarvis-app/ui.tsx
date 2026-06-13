@@ -43,16 +43,20 @@ export function PrimaryButton({
   disabled,
   busy,
   style,
+  id,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
   busy?: boolean;
   style?: React.CSSProperties;
+  /** Optional DOM id — lets the Genouk courier locate this button to "press" it. */
+  id?: string;
 }) {
   const [hover, setHover] = React.useState(false);
   return (
     <button
+      id={id}
       onClick={onClick}
       disabled={disabled}
       onMouseEnter={() => setHover(true)}

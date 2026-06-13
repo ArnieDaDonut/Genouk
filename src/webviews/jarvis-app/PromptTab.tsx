@@ -80,7 +80,7 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
           )}
         </div>
 
-        <PrimaryButton onClick={onReview} disabled={loading || !prompt.trim()} busy={loading} style={{ marginTop: t.space.sm }}>
+        <PrimaryButton id="genouk-btn-reviewPrompt" onClick={onReview} disabled={loading || !prompt.trim()} busy={loading} style={{ marginTop: t.space.sm }}>
           {!loading && <Zap size={14} />}
           {loading ? 'Reviewing…' : 'Review prompt'}
           {!loading && <span style={{ fontWeight: 400, opacity: 0.7, fontSize: t.font.size.sm }}>⌘↵</span>}
