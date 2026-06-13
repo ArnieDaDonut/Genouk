@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import Groq from 'groq-sdk';
-import { GoogleGenAI } from '@google/genai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -42,7 +41,7 @@ interface ResolvedOptions {
 export class AIProvider {
   private static instance: AIProvider;
   private groq?: Groq;
-  private gemini?: GoogleGenAI;
+  private geminiKey?: string;
 
   private constructor() {
     this.initialize();
@@ -69,8 +68,7 @@ export class AIProvider {
     // spike self-heals before we fall through to Gemini.
     this.groq = groqKey ? new Groq({ apiKey: groqKey, maxRetries: 4 }) : undefined;
 
-    const geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY;
-    this.gemini = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : undefined;
+    this.geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY || undefined;
   }
 
   /** Providers to try, in order, given the keys currently configured. */
@@ -98,23 +96,12 @@ export class AIProvider {
       });
     }
 
-    if (this.gemini) {
-      const gemini = this.gemini;
+    if (this.geminiKey) {
+      const key = this.geminiKey;
       const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
       list.push({
         name: 'Gemini',
-        generate: async (userContent, systemContent, opts) => {
-          const response = await gemini.models.generateContent({
-            model: geminiModel,
-            contents: userContent,
-            config: {
-              systemInstruction: systemContent,
-              maxOutputTokens: opts.maxTokens,
-              temperature: opts.temperature,
-            },
-          });
-          return response.text ?? '';
-        },
+        generate: (userContent, systemContent, opts) => callGemini(key, geminiModel, userContent, systemContent, opts),
       });
     }
 
@@ -145,19 +132,67 @@ export class AIProvider {
       );
     }
 
-    let lastError: unknown;
+    // Collect every provider's failure so the surfaced error explains the whole
+    // fallback chain, not just the last hop (e.g. "Groq failed AND Gemini failed").
+    const failures: string[] = [];
     for (const provider of providers) {
       try {
         const text = await provider.generate(userContent, systemContent, opts);
         if (text.trim()) return text;
-        lastError = new Error(`${provider.name} returned an empty response.`);
+        failures.push(`${provider.name}: empty response`);
       } catch (err) {
-        lastError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        failures.push(`${provider.name}: ${shorten(msg)}`);
         console.warn(`[Genouk] ${provider.name} failed, trying next provider:`, err);
       }
     }
 
-    const detail = lastError instanceof Error ? lastError.message : String(lastError);
-    throw new Error(`All AI providers failed. Last error: ${detail}`);
+    throw new Error(`All AI providers failed.\n${failures.map((f) => `• ${f}`).join('\n')}`);
   }
+}
+
+/** Trim a long provider error to its first meaningful line for the UI. */
+function shorten(msg: string): string {
+  // Pull the human-readable "message" out of a JSON error body if present.
+  const m = /"message"\s*:\s*"([^"]+)"/.exec(msg);
+  const text = m ? m[1] : msg;
+  return text.length > 200 ? text.slice(0, 200) + '…' : text;
+}
+
+/**
+ * Call the Gemini REST API directly via fetch. We deliberately avoid the
+ * `@google/genai` SDK: it pulls in Google's auth stack, websockets, and stream
+ * polyfills (~1.5MB bundled) for what is a single JSON POST. Node 18+ (our
+ * target) ships a global `fetch`.
+ */
+async function callGemini(
+  apiKey: string,
+  model: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body: Record<string, unknown> = {
+    contents: [{ parts: [{ text: userContent }] }],
+    generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
+  };
+  if (systemContent) {
+    body.system_instruction = { parts: [{ text: systemContent }] };
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
 }
