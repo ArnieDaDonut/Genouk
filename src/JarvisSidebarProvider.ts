@@ -109,10 +109,10 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
 
     const uri = editor.document.uri;
     const diagnostics = vscode.languages.getDiagnostics(uri);
-    
+
     let errorsCount = 0;
     let warningsCount = 0;
-    
+
     for (const d of diagnostics) {
       if (d.severity === vscode.DiagnosticSeverity.Error) {
         errorsCount++;
