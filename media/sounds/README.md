@@ -1,6 +1,27 @@
-# Sound Files
+# Sound
 
-Place the following MP3 sound effect files in this directory:
+## Score-reactive music (no files needed)
+
+When you review a prompt, Genouk **synthesizes** a short musical phrase that matches
+the score — it does not load an MP3. This runs entirely offline in the webview via
+[Tone.js](https://tonejs.github.io/) (Web Audio), so there's no API key, no network
+call, and no latency. See [`src/webviews/jarvis-app/musicEngine.ts`](../../src/webviews/jarvis-app/musicEngine.ts).
+
+| Prompt score | Tier | Phrase |
+|---|---|---|
+| 80–96 | `triumphant` | Bright C-major fanfare, ascending arpeggio |
+| 60–79 | `good` | Warm major chord with a gentle rise |
+| 40–59 | `uneasy` | Slower A-minor phrase |
+| 0–39 | `chaos` | Diminished cluster + chromatic stumble |
+
+Preview each tier from the **Sounds** tab.
+
+---
+
+# Ambient Sound Files (optional)
+
+The editor-diagnostics ambient loops below are independent of the score-reactive music
+above and are optional. Place the following MP3 sound effect files in this directory:
 
 | File | When it plays | Suggested vibe |
 |---|---|---|

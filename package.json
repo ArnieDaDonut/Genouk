@@ -56,6 +56,17 @@
           "default": "llama-3.3-70b-versatile",
           "description": "Groq model used for prompt and change review."
         },
+        "jarvis.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your Google Gemini API key — used as a free fallback when Groq is rate-limited.",
+          "markdownDescription": "Free fallback provider. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
+        },
+        "jarvis.geminiModel": {
+          "type": "string",
+          "default": "gemini-2.0-flash",
+          "description": "Gemini model used as the fallback (gemini-2.0-flash is free and fast)."
+        },
         "jarvis.maxTokens": {
           "type": "number",
           "default": 4096,
@@ -100,6 +111,7 @@
     "groq-sdk": "^1.2.1",
     "lucide-react": "^0.360.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "tone": "^15.1.22"
   }
 }
