@@ -41,6 +41,11 @@ const VIBE_MOOD: Record<string, { floatDur: number; floatY: number; tint: string
   chaos: { floatDur: 1.5, floatY: 4, tint: 'hue-rotate(-18deg) saturate(1.3) brightness(0.97)', jitter: true },
 };
 
+export interface MascotMessage {
+  text: string;
+  nonce: number;
+}
+
 type ReactionKind = 'cheer' | 'nod' | 'slump' | 'alarmed' | 'thumbsup' | 'save' | 'buildErr' | 'stretch' | 'perk';
 
 interface ReactionMotion {
@@ -48,7 +53,6 @@ interface ReactionMotion {
   duration: number;
 }
 
-// Full-motion reactions: hops, shakes, slumps.
 const FULL_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   cheer: { animate: { y: [0, -26, 0, -12, 0], scale: [1, 1.12, 1, 1.05, 1] }, duration: 1.4 },
   nod: { animate: { y: [0, -6, 0, -4, 0] }, duration: 1.0 },
@@ -61,7 +65,6 @@ const FULL_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   perk: { animate: { y: [0, -8, 0], scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
-// Reduced-motion reactions: opacity/scale-only cues, no shaking or hopping.
 const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   cheer: { animate: { scale: [1, 1.06, 1] }, duration: 0.6 },
   nod: { animate: { scale: [1, 1.03, 1] }, duration: 0.5 },
@@ -71,41 +74,24 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   save: { animate: { opacity: [1, 0.8, 1] }, duration: 0.4 },
   buildErr: { animate: { opacity: [1, 0.5, 1] }, duration: 0.6 },
   stretch: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
-  perk: { animate: { scale: [1, 1.03, 1] }, duration: 0.4 },
+  perk: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
-/** Pick the click/idle quip bank for the current vibe. */
-function vibeBank(vibe: string): QuipBank {
-  if (vibe === 'chill' || vibe === 'fire' || vibe === 'worried' || vibe === 'chaos') return vibe;
-  return 'idle';
+interface MascotProps {
+  vibe: keyof typeof VIBES;
+  thinking: boolean;
+  review: any | null;
+  changeReview: any | null;
+  sessionPlan: any | null;
+  sfx: (name: string) => void;
+  errand: { type: string } | null;
+  say?: MascotMessage | null;
+  onDoubleActivate?: () => void;
 }
 
-const completed = (s: string) => s === 'completed';
-
-/** A short brightness/scale pulse on the real button, as if Genouk pressed it. */
-function pressButton(el: HTMLElement) {
-  try {
-    el.animate(
-      [
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-        { transform: 'scale(0.93)', filter: 'brightness(1.3)' },
-        { transform: 'scale(1)', filter: 'brightness(1)' },
-      ],
-      { duration: 280, easing: 'ease-out' },
-    );
-  } catch {
-    /* WAAPI unsupported — skip the flourish */
-  }
-}
-
-/**
- * The Genouk mascot as a small state machine: entering -> idle, with brief,
- * self-clearing reactions layered over the resting idle/wave loop, plus thinking
- * and sleeping states. Reactions are derived entirely from props the App already
- * owns (vibe, loading flags, review results, playSFX) — no new host messages.
- */
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, onDoubleActivate }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, onDoubleActivate }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
+  const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
   const reduced = useReducedMotion();
 
@@ -134,6 +120,19 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const reactTimer = useRef<number>();
   const sleepTimer = useRef<number>();
   const manualTimer = useRef<number>();
+
+  // External messages (focus-timer reminders, task nudges). Forces the robot
+  // visible — cutting the one-time intro video short if it is somehow still up —
+  // and holds the bubble a little longer than a casual click greeting.
+  useEffect(() => {
+    if (!say || !say.text) return;
+    setVideoActive(false);
+    setShowRobot(true);
+    setManualText(say.text); // local code uses manualText instead of greetingText
+    setManualVisible(true);
+    const timer = setTimeout(() => setManualVisible(false), 9000);
+    return () => clearTimeout(timer);
+  }, [say?.nonce]);
 
   // Sprite sheet geometry: both sheets are 1280x1280 = 5x5 grid of 25 frames.
   const columns = 5;
