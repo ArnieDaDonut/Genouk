@@ -36,6 +36,7 @@ coverage/
 .env
 .env.local
 .env.*.local
+src/shared/devKeys.ts
 
 # ── Sound files (large binary media — add your own locally) ──────────────────
 media/sounds/*.mp3

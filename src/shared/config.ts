@@ -1,5 +1,12 @@
 import * as vscode from 'vscode';
 
+// Local dev fallback — devKeys.ts is gitignored and never committed
+let DEV_GEMINI_API_KEY = '';
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DEV_GEMINI_API_KEY = require('./devKeys').DEV_GEMINI_API_KEY ?? '';
+} catch { /* file doesn't exist in prod/CI — that's fine */ }
+
 const SECTION = 'detonate';
 
 export function getConfig<T>(key: string, fallback: T): T {
@@ -7,7 +14,7 @@ export function getConfig<T>(key: string, fallback: T): T {
 }
 
 export function getGeminiApiKey(): string {
-  return getConfig<string>('geminiApiKey', '');
+  return getConfig<string>('geminiApiKey', '') || DEV_GEMINI_API_KEY;
 }
 
 export function getVibeSound(): boolean {
