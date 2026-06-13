@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Check, Circle, CircleDot, Trash2, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Circle, CircleDot, Trash2, Clock, ExternalLink } from 'lucide-react';
 import { t } from './theme';
 import { Label } from './ui';
 import { SessionPlan, SessionTask } from './types';
@@ -86,6 +86,11 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onAdvance, onRegress, onRemov
         <span style={{ flex: 1, minWidth: 0, fontWeight: t.font.weight.semibold, fontSize: t.font.size.md, color: t.color.fg, textDecoration: isDone ? 'line-through' : 'none', lineHeight: 1.35 }}>
           {task.title}
         </span>
+        {task.linearIssueUrl && (
+          <a href={task.linearIssueUrl} target="_blank" rel="noreferrer" title="Open in Linear" style={{ color: t.color.accent, cursor: 'pointer', flexShrink: 0, marginTop: 2 }}>
+            <ExternalLink size={14} />
+          </a>
+        )}
         <button onClick={onRemove} title="Delete task" style={{ background: 'transparent', border: 'none', color: t.color.muted, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
           <Trash2 size={13} />
         </button>

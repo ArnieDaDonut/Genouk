@@ -5,7 +5,7 @@
 When you review a prompt, Genouk **synthesizes** a short musical phrase that matches
 the score — it does not load an MP3. This runs entirely offline in the webview via
 [Tone.js](https://tonejs.github.io/) (Web Audio), so there's no API key, no network
-call, and no latency. See [`src/webviews/jarvis-app/musicEngine.ts`](../../src/webviews/jarvis-app/musicEngine.ts).
+call, and no latency. See [`src/webviews/genouk-app/musicEngine.ts`](../../src/webviews/genouk-app/musicEngine.ts).
 
 | Prompt score | Tier | Phrase |
 |---|---|---|

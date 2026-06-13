@@ -14,6 +14,8 @@ interface Props {
   onSave: (plan: SessionPlan | null) => void;
   /** Open the standalone popout planner window. */
   onPopout: () => void;
+  onSyncLinear?: () => void;
+  syncingLinear?: boolean;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -29,7 +31,7 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
 };
 
-export const SessionTab: React.FC<Props> = ({ plan, loading, onGenerate, onSave, onPopout }) => {
+export const SessionTab: React.FC<Props> = ({ plan, loading, onGenerate, onSave, onPopout, onSyncLinear, syncingLinear }) => {
   const [goal, setGoal] = useState('');
 
   if (loading) return <Card><LoadingRow label="Planning your session…" /></Card>;
@@ -69,6 +71,11 @@ export const SessionTab: React.FC<Props> = ({ plan, loading, onGenerate, onSave,
           <span style={{ fontSize: t.font.size.sm, color: t.color.muted }}>Est. {plan.estimatedDuration}</span>
         </div>
         <div style={{ display: 'flex', gap: t.space.xs, flexShrink: 0 }}>
+          {onSyncLinear && (
+            <GhostButton onClick={onSyncLinear} disabled={syncingLinear} title="Sync tasks to Linear">
+              <RefreshCw size={12} className={syncingLinear ? "genouk-spin" : ""} /> {syncingLinear ? "Syncing..." : "Sync Linear"}
+            </GhostButton>
+          )}
           <GhostButton onClick={onPopout} title="Open in its own window">
             <ExternalLink size={12} /> Popout
           </GhostButton>

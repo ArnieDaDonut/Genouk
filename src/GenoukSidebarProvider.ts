@@ -3,9 +3,10 @@ import { PromptReviewer } from './PromptReviewer';
 import { ChangeReviewer } from './ChangeReviewer';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
+import { LinearService } from './LinearService';
 import { getNonce } from './webviewHtml';
 
-export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
+export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
   private promptReviewer = new PromptReviewer();
   private changeReviewer = new ChangeReviewer();
@@ -87,6 +88,31 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
             await this._store.generate(data.value);
           } catch (error: any) {
             webviewView.webview.postMessage({ type: 'error', value: error.message });
+          }
+          break;
+        }
+        case 'syncToLinear': {
+          const config = vscode.workspace.getConfiguration('genouk');
+          const apiKey = config.get<string>('linearApiKey');
+          const teamId = config.get<string>('linearTeamId');
+          
+          if (!apiKey || !teamId) {
+            vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+            break;
+          }
+
+          const plan = this._store.get();
+          if (!plan) break;
+
+          try {
+            const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
+            await this._store.set(updatedPlan);
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: true } });
+            vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
+          } catch (error: any) {
+            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
           }
           break;
         }
@@ -196,7 +222,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
 
   private _getHtmlForWebview(webview: vscode.Webview) {
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this._extensionUri, 'dist', 'jarvisApp.js')
+      vscode.Uri.joinPath(this._extensionUri, 'dist', 'genoukApp.js')
     );
 
     const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
@@ -212,7 +238,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
         <meta charset="UTF-8">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; media-src ${webview.cspSource} https:; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https:;">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Jarvis Assistant</title>
+        <title>Genouk Assistant</title>
       </head>
       <body>
         <div id="root"></div>

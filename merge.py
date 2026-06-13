@@ -29,7 +29,7 @@ greetings_match = re.search(r'const greetings = \[.*?\];', genouk_content, re.DO
 if greetings_match and 'const greetings =' not in new_content:
     new_content = new_content.replace('const vscode = window.acquireVsCodeApi();\n', 'const vscode = window.acquireVsCodeApi();\n\n' + greetings_match.group(0) + '\n')
 
-with open('src/webviews/jarvis-app/index.tsx', 'w') as f:
+with open('src/webviews/genouk-app/index.tsx', 'w') as f:
     f.write(new_content)
 
 print("Merge complete")

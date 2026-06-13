@@ -7,6 +7,8 @@ export interface SessionTask {
   estimatedMinutes: number;
   difficulty: 'easy' | 'medium' | 'hard';
   status: 'todo' | 'in_progress' | 'completed';
+  linearIssueId?: string;
+  linearIssueUrl?: string;
 }
 
 export interface SessionPlan {
@@ -18,7 +20,7 @@ export interface SessionPlan {
 export class SessionPlanner {
   async generateSessionPlan(goal: string): Promise<SessionPlan> {
     const ai = AIProvider.getInstance();
-    const systemPrompt = `You are JARVIS, an expert software architect and assistant.
+    const systemPrompt = `You are GENOUK, an expert software architect and assistant.
 Break down the user's coding session goal into a structured step-by-step implementation plan.
 Provide a total estimated duration, and a clear list of specific subtasks.
 
@@ -52,7 +54,7 @@ Respond ONLY with a valid JSON object matching this schema:
       const cleaned = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(cleaned) as SessionPlan;
     } catch (e) {
-      throw new Error("Failed to parse JARVIS session plan.");
+      throw new Error("Failed to parse GENOUK session plan.");
     }
   }
 }

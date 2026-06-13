@@ -17,7 +17,7 @@ const extensionOptions = {
 };
 
 const webviewOptions = {
-  entryPoints: { jarvisApp: 'src/webviews/jarvis-app/index.tsx' },
+  entryPoints: { genoukApp: 'src/webviews/genouk-app/index.tsx' },
   bundle: true,
   outdir: 'dist',
   format: 'iife',

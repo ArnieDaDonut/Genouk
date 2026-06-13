@@ -29,6 +29,7 @@ export const PlannerView: React.FC = () => {
   const [goal, setGoal] = useState('');
   const [error, setError] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
+  const [syncingLinear, setSyncingLinear] = useState(false);
 
   const planRef = useRef<SessionPlan | null>(null);
   useEffect(() => { planRef.current = plan; }, [plan]);
@@ -41,9 +42,13 @@ export const PlannerView: React.FC = () => {
           setPlan(message.value);
           setLoading(false);
           break;
+        case 'syncToLinearResult':
+          setSyncingLinear(false);
+          break;
         case 'error':
           setError(message.value);
           setLoading(false);
+          setSyncingLinear(false);
           break;
       }
     };
@@ -62,6 +67,12 @@ export const PlannerView: React.FC = () => {
     setLoading(true);
     setError('');
     vscode.postMessage({ type: 'generateSessionPlan', value: goal });
+  };
+
+  const handleSyncLinear = () => {
+    setSyncingLinear(true);
+    setError('');
+    vscode.postMessage({ type: 'syncToLinear' });
   };
 
   const nextTaskTitle = (): string | null => {
@@ -115,9 +126,14 @@ export const PlannerView: React.FC = () => {
           <p style={{ margin: '2px 0 0', fontSize: t.font.size.md, color: t.color.muted }}>Plan, track, and time-box your coding session.</p>
         </div>
         {plan && (
-          <GhostButton onClick={() => save(null)} title="Clear this plan">
-            <RefreshCw size={13} /> New plan
-          </GhostButton>
+          <div style={{ display: 'flex', gap: t.space.sm }}>
+            <GhostButton onClick={handleSyncLinear} disabled={syncingLinear} title="Sync tasks to Linear">
+              <RefreshCw size={13} className={syncingLinear ? "genouk-spin" : ""} /> {syncingLinear ? "Syncing..." : "Sync Linear"}
+            </GhostButton>
+            <GhostButton onClick={() => save(null)} title="Clear this plan">
+              <RefreshCw size={13} /> New plan
+            </GhostButton>
+          </div>
         )}
       </div>
 

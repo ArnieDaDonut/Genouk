@@ -135,6 +135,8 @@ const App = () => {
   useEffect(() => { volumeRef.current = volume; }, [volume]);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
+  const [syncingLinear, setSyncingLinear] = useState(false);
+
   // Host -> webview messages
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -173,11 +175,15 @@ const App = () => {
           setChangeReview(message.value);
           setChangeLoading(false);
           break;
+        case 'syncToLinearResult':
+          setSyncingLinear(false);
+          break;
         case 'error':
           setError(message.value);
           setPromptLoading(false);
           setChangeLoading(false);
           setSessionLoading(false);
+          setSyncingLinear(false);
           break;
       }
     };
@@ -275,6 +281,12 @@ const App = () => {
   const handleSaveSession = (plan: SessionPlan | null) => {
     setSessionPlan(plan);
     vscode.postMessage({ type: 'saveSessionPlan', value: plan });
+  };
+
+  const handleSyncLinear = () => {
+    setSyncingLinear(true);
+    setError('');
+    vscode.postMessage({ type: 'syncToLinear' });
   };
 
   return (
@@ -408,6 +420,8 @@ const App = () => {
               onGenerate={handleGenerateSession}
               onSave={handleSaveSession}
               onPopout={() => vscode.postMessage({ type: 'openPlanner' })}
+              onSyncLinear={handleSyncLinear}
+              syncingLinear={syncingLinear}
             />
           </div>
         )}

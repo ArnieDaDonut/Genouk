@@ -20,7 +20,7 @@ const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
 
-/** One backend Jarvis can call. Tried in order; the first that succeeds wins. */
+/** One backend Genouk can call. Tried in order; the first that succeeds wins. */
 interface Provider {
   name: string;
   generate(userContent: string, systemContent: string | undefined, opts: ResolvedOptions): Promise<string>;
@@ -47,7 +47,7 @@ export class AIProvider {
   private constructor() {
     this.initialize();
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('jarvis.groqApiKey') || e.affectsConfiguration('jarvis.geminiApiKey')) {
+      if (e.affectsConfiguration('genouk.groqApiKey') || e.affectsConfiguration('genouk.geminiApiKey')) {
         this.initialize();
       }
     });
@@ -61,7 +61,7 @@ export class AIProvider {
   }
 
   private initialize() {
-    const config = vscode.workspace.getConfiguration('jarvis');
+    const config = vscode.workspace.getConfiguration('genouk');
 
     const groqKey = config.get<string>('groqApiKey') || process.env.GROQ_API_KEY;
     // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
@@ -75,7 +75,7 @@ export class AIProvider {
 
   /** Providers to try, in order, given the keys currently configured. */
   private providers(): Provider[] {
-    const config = vscode.workspace.getConfiguration('jarvis');
+    const config = vscode.workspace.getConfiguration('genouk');
     const list: Provider[] = [];
 
     if (this.groq) {
@@ -131,7 +131,7 @@ export class AIProvider {
     systemContent?: string,
     options: GenerateOptions = {},
   ): Promise<string> {
-    const config = vscode.workspace.getConfiguration('jarvis');
+    const config = vscode.workspace.getConfiguration('genouk');
     const opts: ResolvedOptions = {
       maxTokens: options.maxTokens ?? config.get<number>('maxTokens') ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? config.get<number>('temperature') ?? DEFAULT_TEMPERATURE,
@@ -141,7 +141,7 @@ export class AIProvider {
     const providers = this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Add a free Groq key (jarvis.groqApiKey) or Gemini key (jarvis.geminiApiKey) in settings.',
+        'No AI provider is configured. Add a free Groq key (genouk.groqApiKey) or Gemini key (genouk.geminiApiKey) in settings.',
       );
     }
 

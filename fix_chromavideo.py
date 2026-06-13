@@ -11,12 +11,12 @@ else:
     print("Failed to find ChromaVideo")
     exit(1)
 
-with open('src/webviews/jarvis-app/index.tsx', 'r') as f:
+with open('src/webviews/genouk-app/index.tsx', 'r') as f:
     index_content = f.read()
 
 index_content = index_content.replace('];\n\ninterface SessionTask', '];\n\n' + chroma_code + '\ninterface SessionTask')
 
-with open('src/webviews/jarvis-app/index.tsx', 'w') as f:
+with open('src/webviews/genouk-app/index.tsx', 'w') as f:
     f.write(index_content)
 
 print("Fixed")
