@@ -1235,6 +1235,7 @@ const GenoukPet = () => {
   const images = window.PET_IMAGES || [];
   const videoUrl = window.PET_VIDEO || '';
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
+  const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
 
   const [greetingText, setGreetingText] = useState(greetings[0]);
   const [greetingVisible, setGreetingVisible] = useState(false);
@@ -1444,7 +1445,8 @@ const GenoukPet = () => {
                   cursor: 'pointer',
                   userSelect: 'none',
                   // CSS background-image sprite: crop to one frame via background-position
-                  backgroundImage: walkSpriteUrl ? `url('${walkSpriteUrl}')` : 'none',
+                  // Using wave animation as requested (walk animation URL stored in walkSpriteUrl)
+                  backgroundImage: waveSpriteUrl ? `url('${waveSpriteUrl}')` : 'none',
                   backgroundRepeat: 'no-repeat',
                   backgroundSize: `${bgSizeW}px ${bgSizeH}px`,
                   backgroundPosition: `${bgPosX}px ${bgPosY}px`,

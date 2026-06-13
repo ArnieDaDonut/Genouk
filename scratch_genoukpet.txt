@@ -1,0 +1,127 @@
+const GenoukPet = () => {
+  const images = window.PET_IMAGES || [];
+  const videoUrl = window.PET_VIDEO || '';
+  const walkSpriteUrl = window.PET_WALK_SPRITE || '';
+
+  const [greetingText, setGreetingText] = useState(greetings[0]);
+  const [greetingVisible, setGreetingVisible] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [videoActive, setVideoActive] = useState(!!videoUrl);
+  const [showRobot, setShowRobot] = useState(!videoUrl);
+
+  // Animation controller states
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [fps, setFps] = useState(12);
+  const [currentFrame, setCurrentFrame] = useState(0);
+
+  // Sprite dimensions
+  const frameWidth = 128;
+  const frameHeight = 128;
+  const columns = 5;
+  const frameCount = 25;
+  
+  // Display scale — bigger = larger sprite on screen
+  const displayScale = 2.5;
+  const displayWidth = frameWidth * displayScale;
+  const displayHeight = frameHeight * displayScale;
+
+  // Show the greeting bubble and handle timer after the robot has faded in
+  useEffect(() => {
+    if (showRobot) {
+      setGreetingVisible(true);
+      const timer = setTimeout(() => {
+        setGreetingVisible(false);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [showRobot]);
+
+  // Handle animation loop
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = 1000 / fps;
+    const timer = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frameCount);
+    }, interval);
+    return () => clearInterval(timer);
+  }, [isPlaying, fps]);
+
+  // Trigger a reaction on click
+  const handleRobotClick = () => {
+    // Pick a random greeting
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    setGreetingText(randomGreeting);
+    setGreetingVisible(true);
+  };
+
+  const col = currentFrame % columns;
+  const row = Math.floor(currentFrame / columns);
+
+  // CSS background-image sprite approach: position the sheet so only the target frame shows.
+  // bgPos offsets move the sheet left/up to reveal the correct column/row.
+  const bgPosX = -(col * displayWidth);
+  const bgPosY = -(row * displayHeight);
+  // background-size must be the full scaled sheet dimensions
+  const bgSizeW = columns * displayWidth;           // 5 cols × 192px = 960px
+  const bgSizeH = (frameCount / columns) * displayHeight; // 5 rows × 192px = 960px
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+      height: 'auto',
+      marginTop: '20px',
+      overflow: 'hidden',
+      background: 'transparent',
+      fontFamily: 'var(--vscode-font-family, system-ui, -apple-system, sans-serif)',
+      position: 'relative',
+      padding: '16px 8px',
+      boxSizing: 'border-box',
+    }}>
+      {/* Soft background pulse glow */}
+      <motion.div
+        animate={{
+          opacity: isHovered && showRobot ? [0.15, 0.25, 0.15] : (showRobot ? [0.06, 0.12, 0.06] : 0),
+          scale: isHovered && showRobot ? 1.1 : 1.0,
+        }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+        style={{
+          position: 'absolute',
+          width: '320px',
+          height: '320px',
+          background: 'radial-gradient(circle, var(--vscode-button-background, #007acc) 0%, rgba(0,0,0,0) 70%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+          top: '60px',
+        }}
+      />
+
+      {/* Speech bubble */}
+      <div style={{ height: '70px', display: 'flex', alignItems: 'flex-end', marginBottom: '8px', zIndex: 2 }}>
+        <AnimatePresence mode="wait">
+          {greetingVisible && showRobot && (
+            <motion.div
+              initial={{ opacity: 0, y: 15, scale: 0.85 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85, y: -15 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              style={{
+                background: 'var(--vscode-button-background, #007acc)',
+                color: 'var(--vscode-button-foreground, #ffffff)',
+                padding: '8px 14px',
+                borderRadius: '16px 16px 16px 4px',
+                fontSize: '13px',
+                fontWeight: 500,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                position: 'relative',
+                maxWidth: '220px',
+                textAlign: 'center',
+                lineHeight: '1.4',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+              }}
+            >
+              {greetingText}
+              <div style={{
