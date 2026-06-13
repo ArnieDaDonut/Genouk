@@ -1,13 +1,7 @@
 import * as vscode from 'vscode';
-import { PromptReviewer } from './PromptReviewer';
-import { ChangeReviewer } from './ChangeReviewer';
 
 export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
-  _doc?: vscode.TextDocument;
-  
-  private promptReviewer = new PromptReviewer();
-  private changeReviewer = new ChangeReviewer();
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -20,30 +14,6 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
     };
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
-    webviewView.webview.onDidReceiveMessage(async (data) => {
-      switch (data.type) {
-        case 'reviewPrompt': {
-          if (!data.value) return;
-          try {
-            const review = await this.promptReviewer.reviewPrompt(data.value);
-            webviewView.webview.postMessage({ type: 'promptReviewResult', value: review });
-          } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
-          }
-          break;
-        }
-        case 'reviewChanges': {
-          try {
-            const review = await this.changeReviewer.reviewChanges();
-            webviewView.webview.postMessage({ type: 'changeReviewResult', value: review });
-          } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
-          }
-          break;
-        }
-      }
-    });
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {
@@ -51,21 +21,26 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
       vscode.Uri.joinPath(this._extensionUri, 'dist', 'jarvisApp.js')
     );
 
+    const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
+    const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
+
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline';">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; media-src ${webview.cspSource}; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline';">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Jarvis Assistant</title>
+        <title>Genouk Pet</title>
       </head>
-      <body>
+      <body style="padding: 0; margin: 0; background: transparent !important; overflow: hidden;">
         <div id="root"></div>
         <script nonce="${nonce}">
-          const vscode = acquireVsCodeApi();
-          window.acquireVsCodeApi = () => vscode;
+          window.PET_IMAGES = [
+            "${petUri}"
+          ];
+          window.PET_VIDEO = "${videoUri}";
         </script>
         <script nonce="${nonce}" src="${scriptUri}"></script>
       </body>

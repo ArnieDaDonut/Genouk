@@ -9,7 +9,9 @@
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": ["$tsc"],
+      "problemMatcher": [
+        "$tsc"
+      ],
       "presentation": {
         "reveal": "silent"
       }
@@ -20,7 +22,9 @@
       "command": "node esbuild.config.js --watch",
       "isBackground": true,
       "group": "build",
-      "problemMatcher": ["$tsc-watch"],
+      "problemMatcher": [
+        "$tsc-watch"
+      ],
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"
