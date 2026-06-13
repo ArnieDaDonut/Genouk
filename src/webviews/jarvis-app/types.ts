@@ -25,6 +25,22 @@ export interface SessionPlan {
   tasks: SessionTask[];
 }
 
+export interface TourStop {
+  title: string;
+  file: string;
+  relatedFiles: string[];
+  what: string;
+  how: string;
+}
+
+export interface CodebaseTour {
+  summary: string;
+  inferred: boolean;
+  architecture: string;
+  techStack: string[];
+  stops: TourStop[];
+}
+
 export interface VibeState {
   score: number | null;
   vibe: string;

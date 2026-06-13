@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PromptReviewer } from './PromptReviewer';
 import { ChangeReviewer } from './ChangeReviewer';
+import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
 import { getNonce } from './webviewHtml';
@@ -9,6 +10,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
   private promptReviewer = new PromptReviewer();
   private changeReviewer = new ChangeReviewer();
+  private tourGenerator = new CodebaseTourGenerator();
   private _extensionUri: vscode.Uri;
 
   constructor(
@@ -94,8 +96,40 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           PlannerPanel.createOrShow(this._extensionUri, this._store);
           break;
         }
+        case 'getTour': {
+          webviewView.webview.postMessage({ type: 'tourResult', value: this._context.workspaceState.get('codebaseTour') ?? null });
+          break;
+        }
+        case 'generateTour': {
+          try {
+            const tour = await this.tourGenerator.generateTour(data.value);
+            await this._context.workspaceState.update('codebaseTour', tour);
+            webviewView.webview.postMessage({ type: 'tourResult', value: tour });
+          } catch (error: any) {
+            webviewView.webview.postMessage({ type: 'error', value: error.message });
+          }
+          break;
+        }
+        case 'openFile': {
+          await this.openWorkspaceFile(data.value);
+          break;
+        }
       }
     });
+  }
+
+  /** Open a workspace-relative file path in the editor (best-effort). */
+  private async openWorkspaceFile(relPath: string) {
+    if (!relPath) return;
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return;
+    try {
+      const uri = vscode.Uri.joinPath(folders[0].uri, relPath);
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, { preview: true });
+    } catch {
+      vscode.window.showWarningMessage(`Genouk: couldn't open ${relPath}`);
+    }
   }
 
   private updateDiagnosticsScore() {

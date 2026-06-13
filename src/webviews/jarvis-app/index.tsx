@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
-import { PromptReviewResult, SessionPlan, VibeState } from './types';
+import { PromptReviewResult, SessionPlan, CodebaseTour, VibeState } from './types';
 import { PromptTab } from './PromptTab';
 import { ChangesTab } from './ChangesTab';
 import { SessionTab } from './SessionTab';
+import { TourTab } from './TourTab';
 import { AudioTab } from './AudioTab';
-import { EditorHealth } from './EditorHealth';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
@@ -25,11 +25,12 @@ const BREAK_NUDGES = [
 
 declare const window: any;
 
-type TabId = 'prompts' | 'session' | 'changes' | 'audio';
+type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'audio';
 
 const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'prompts', label: 'Prompts', Icon: Sparkles },
   { id: 'session', label: 'Session', Icon: ListTodo },
+  { id: 'tour', label: 'Tour', Icon: Compass },
   { id: 'changes', label: 'Changes', Icon: GitBranch },
   { id: 'audio', label: 'Sounds', Icon: Volume2 },
 ];
@@ -64,6 +65,16 @@ const App = () => {
   // Session
   const [sessionPlan, setSessionPlan] = useState<SessionPlan | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Codebase tour
+  const [tour, setTour] = useState<CodebaseTour | null>(null);
+  const [tourLoading, setTourLoading] = useState(false);
+
+  // Live (narrated) tour playback
+  const [tourPlaying, setTourPlaying] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+  const [activeStop, setActiveStop] = useState<number | null>(null);
+  const [walkSignal, setWalkSignal] = useState(0);
 
   // Mascot speech (focus-timer reminders + task nudges)
   const [mascotSay, setMascotSay] = useState<MascotMessage | null>(null);
@@ -157,6 +168,10 @@ const App = () => {
           setSessionPlan(message.value);
           setSessionLoading(false);
           break;
+        case 'tourResult':
+          setTour(message.value);
+          setTourLoading(false);
+          break;
         case 'promptReviewResult':
           setReview(message.value);
           setPromptLoading(false);
@@ -170,6 +185,7 @@ const App = () => {
           setPromptLoading(false);
           setChangeLoading(false);
           setSessionLoading(false);
+          setTourLoading(false);
           break;
       }
     };
@@ -179,6 +195,7 @@ const App = () => {
     sfxAudioRef.current = new Audio();
     vscode.postMessage({ type: 'getAudioUris' });
     vscode.postMessage({ type: 'getSessionPlan' });
+    vscode.postMessage({ type: 'getTour' });
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -264,6 +281,59 @@ const App = () => {
     vscode.postMessage({ type: 'saveSessionPlan', value: plan });
   };
 
+  const handleGenerateTour = (description: string) => {
+    setTourLoading(true);
+    setError('');
+    setTour(null);
+    vscode.postMessage({ type: 'generateTour', value: description });
+  };
+
+  const handleResetTour = () => {
+    setTour(null);
+  };
+
+  const handleOpenFile = (file: string) => {
+    vscode.postMessage({ type: 'openFile', value: file });
+  };
+
+  const startLiveTour = () => {
+    if (!tour || tour.stops.length === 0) return;
+    setActiveTab('tour');
+    setTourStep(0);
+    setTourPlaying(true);
+  };
+
+  const stopLiveTour = () => {
+    setTourPlaying(false);
+    setActiveStop(null);
+  };
+
+  // Drive the narrated tour: each step switches to the Tour tab, opens the stop's
+  // file, makes Genouk walk + speak, then schedules the next step. Reading time
+  // scales with the blurb length.
+  useEffect(() => {
+    if (!tourPlaying || !tour || tour.stops.length === 0) return;
+
+    if (tourStep >= tour.stops.length) {
+      speak("That's the whole tour — you're all caught up. 🎉");
+      setTourPlaying(false);
+      setActiveStop(null);
+      return;
+    }
+
+    const stop = tour.stops[tourStep];
+    setActiveStop(tourStep);
+    setActiveTab('tour');
+    if (stop.file) vscode.postMessage({ type: 'openFile', value: stop.file });
+    setWalkSignal(Date.now());
+    speak(`Stop ${tourStep + 1} of ${tour.stops.length} — ${stop.title}. ${stop.what}`);
+
+    const words = `${stop.title} ${stop.what}`.split(/\s+/).length;
+    const ms = Math.min(17000, Math.max(7000, words * 360));
+    const id = window.setTimeout(() => setTourStep((s) => s + 1), ms);
+    return () => clearTimeout(id);
+  }, [tourPlaying, tourStep, tour]);
+
   return (
     <div
       className="genouk-root"
@@ -320,8 +390,6 @@ const App = () => {
           <span style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted }}>v0.0.1</span>
         </div>
       </div>
-
-      <EditorHealth vibe={vibe} />
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${t.color.border}`, marginBottom: t.space.md }}>
@@ -398,6 +466,19 @@ const App = () => {
             />
           </div>
         )}
+        {activeTab === 'tour' && (
+          <TourTab
+            tour={tour}
+            loading={tourLoading}
+            onGenerate={handleGenerateTour}
+            onReset={handleResetTour}
+            onOpenFile={handleOpenFile}
+            playing={tourPlaying}
+            activeStop={activeStop}
+            onPlay={startLiveTour}
+            onStop={stopLiveTour}
+          />
+        )}
         {activeTab === 'changes' && (
           <ChangesTab changeReview={changeReview} loading={changeLoading} onReview={handleReviewChanges} />
         )}
@@ -415,6 +496,7 @@ const App = () => {
         sfx={sfx}
         errand={errand}
         say={mascotSay}
+        walkSignal={walkSignal}
         onDoubleActivate={() => {
           setActiveTab('prompts');
           handleReviewPrompt();

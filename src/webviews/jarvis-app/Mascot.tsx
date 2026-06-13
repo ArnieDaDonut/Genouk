@@ -21,6 +21,10 @@ interface MascotProps {
   sfx: { kind: string; nonce: number } | null;
   /** A review the user just kicked off — sends the courier to press that button. */
   errand?: { kind: string; nonce: number } | null;
+  /** Push a message to make Genouk speak (reminders, live-tour narration). */
+  say?: MascotMessage | null;
+  /** Bump to make Genouk walk/stroll across the panel (live-tour steps). */
+  walkSignal?: number;
   /** Double-click shortcut into the prompt review. */
   onDoubleActivate?: () => void;
 }
@@ -77,19 +81,7 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   perk: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
-interface MascotProps {
-  vibe: keyof typeof VIBES;
-  thinking: boolean;
-  review: any | null;
-  changeReview: any | null;
-  sessionPlan: any | null;
-  sfx: (name: string) => void;
-  errand: { type: string } | null;
-  say?: MascotMessage | null;
-  onDoubleActivate?: () => void;
-}
-
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, onDoubleActivate }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
@@ -121,17 +113,16 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const sleepTimer = useRef<number>();
   const manualTimer = useRef<number>();
 
-  // External messages (focus-timer reminders, task nudges). Forces the robot
-  // visible — cutting the one-time intro video short if it is somehow still up —
-  // and holds the bubble a little longer than a casual click greeting.
+  // External messages (focus-timer reminders, task nudges, live-tour narration).
+  // Make sure Genouk has "arrived" so the bubble shows, then hold the line a
+  // little longer than a casual click greeting.
   useEffect(() => {
     if (!say || !say.text) return;
-    setVideoActive(false);
-    setShowRobot(true);
-    setManualText(say.text); // local code uses manualText instead of greetingText
+    setPhase('arrived');
+    setManualText(say.text);
     setManualVisible(true);
-    const timer = setTimeout(() => setManualVisible(false), 9000);
-    return () => clearTimeout(timer);
+    if (manualTimer.current) clearTimeout(manualTimer.current);
+    manualTimer.current = window.setTimeout(() => setManualVisible(false), 9000);
   }, [say?.nonce]);
 
   // Sprite sheet geometry: both sheets are 1280x1280 = 5x5 grid of 25 frames.
@@ -253,6 +244,19 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     if (reduced) return;
     runErrand(errand.kind);
   }, [errand, reduced, runErrand]);
+
+  // Live-tour step: make Genouk walk across the panel on each new signal.
+  const prevWalk = useRef(0);
+  useEffect(() => {
+    if (!walkSignal || walkSignal === prevWalk.current) return;
+    prevWalk.current = walkSignal;
+    if (reduced) return;
+    markActivity();
+    setPhase('arrived');
+    setStrolling(true);
+    const id = window.setTimeout(() => setStrolling(false), 4600);
+    return () => clearTimeout(id);
+  }, [walkSignal, reduced, markActivity]);
 
   // Occasional idle stroll across the panel (disabled under reduced motion).
   useEffect(() => {
