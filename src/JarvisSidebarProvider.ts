@@ -193,6 +193,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
     const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
     const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
+    const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
 
     const nonce = getNonce();
 
@@ -212,6 +213,7 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           ];
           window.PET_VIDEO = "${videoUri}";
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
+          window.PET_WAVE_SPRITE = "${waveSpriteUri}";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;
