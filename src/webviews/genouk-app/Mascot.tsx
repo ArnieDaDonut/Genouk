@@ -379,8 +379,8 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
           : null);
   const bubbleVisible = phase === 'arrived' && !!bubbleText;
 
-  const useWalkSheet = phase === 'walking';
-  const useTourSheet = strolling || (tourPlaying && phase === 'arrived' && !!say);
+  const useWalkSheet = phase === 'walking' || (strolling && !tourPlaying);
+  const useTourSheet = (tourPlaying && strolling) || (tourPlaying && phase === 'arrived' && !!say);
   const spriteUrl = useWalkSheet ? walkSpriteUrl : (useTourSheet ? tourSpriteUrl : waveSpriteUrl);
   const col = currentFrame % columns;
   const row = Math.floor(currentFrame / columns);
