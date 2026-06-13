@@ -3,6 +3,24 @@ import { Zap, Copy, Check, ArrowUp, Lightbulb } from 'lucide-react';
 import { t } from './theme';
 import { Card, Label, PrimaryButton, GhostButton, ScoreRing, TokenBadge, LoadingRow } from './ui';
 import { PromptReviewResult, estimateTokens } from './types';
+import {
+  TARGET_MODELS,
+  DEFAULT_MODEL_ID,
+  findModel,
+  estimateTokensForModel,
+  contextPct,
+  formatContextWindow,
+} from './models';
+
+// Persist the chosen target model across reloads (webview localStorage is sandboxed).
+const MODEL_STORAGE_KEY = 'genouk.targetModel';
+function loadModelId(): string {
+  try {
+    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL_ID;
+  } catch {
+    return DEFAULT_MODEL_ID;
+  }
+}
 
 interface Props {
   prompt: string;
@@ -17,7 +35,19 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [copied, setCopied] = useState(false);
 
-  const liveTokens = estimateTokens(prompt);
+  const [modelId, setModelId] = useState<string>(loadModelId);
+  const targetModel = findModel(modelId);
+  const onModelChange = (id: string) => {
+    setModelId(id);
+    try { localStorage.setItem(MODEL_STORAGE_KEY, id); } catch { /* sandboxed */ }
+  };
+
+  // Model-aware estimate: how many tokens this prompt costs the chosen target
+  // model, and how much of its context window that fills.
+  const modelTokens = estimateTokensForModel(prompt, targetModel);
+  const pct = contextPct(modelTokens, targetModel);
+  const pctLabel = pct > 0 && pct < 0.1 ? '<0.1' : pct.toFixed(1);
+
   // Count from the actual text shown, not the model's self-estimate — the model's
   // numbers drifted from what it actually produced.
   const originalTokens = estimateTokens(prompt);
@@ -73,11 +103,48 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
               outline: 'none',
             }}
           />
-          {prompt && (
-            <div style={{ position: 'absolute', bottom: 8, right: 10, fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted }}>
-              ~{liveTokens} tokens
-            </div>
-          )}
+        </div>
+
+        {/* Target-model picker + live, model-aware token estimate */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: t.space.sm,
+            marginTop: t.space.sm,
+            flexWrap: 'wrap',
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: t.space.xs, fontSize: t.font.size.xs, color: t.color.muted }}>
+            <span>Target model</span>
+            <select
+              value={modelId}
+              onChange={(e) => onModelChange(e.target.value)}
+              title="The model you'll send this prompt to — used to estimate token cost"
+              style={{
+                background: t.color.inputBg,
+                color: t.color.inputFg,
+                border: `1px solid ${t.color.inputBorder}`,
+                borderRadius: t.radius.sm,
+                padding: '3px 6px',
+                fontSize: t.font.size.xs,
+                fontFamily: t.font.ui,
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {TARGET_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <span style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted, whiteSpace: 'nowrap' }}>
+            {prompt.trim()
+              ? <>~{modelTokens.toLocaleString()} tokens · {pctLabel}% of {formatContextWindow(targetModel.contextWindow)}</>
+              : <>context {formatContextWindow(targetModel.contextWindow)} tokens</>}
+          </span>
         </div>
 
         <PrimaryButton id="genouk-btn-reviewPrompt" onClick={onReview} disabled={loading || !prompt.trim()} busy={loading} style={{ marginTop: t.space.sm }}>

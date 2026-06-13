@@ -6,54 +6,39 @@ import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
 import { LinearService } from './LinearService';
 import { getNonce } from './webviewHtml';
-import { log } from './log';
-import { recentDigests, deleteDigest, clearDigests } from './memory/sessionMemoryStore';
-import * as fs from 'fs';
-import * as path from 'path';
+import { getSecret } from './secrets';
+import { TourNavigator } from './sidebar/TourNavigator';
+import { MemoryService } from './sidebar/MemoryService';
+import { VibeMonitor } from './sidebar/VibeMonitor';
 
 export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
-  private promptReviewer = new PromptReviewer();
-  private changeReviewer = new ChangeReviewer();
-  private tourGenerator = new CodebaseTourGenerator();
-  private _extensionUri: vscode.Uri;
+  private readonly _extensionUri: vscode.Uri;
 
-  // Spotlight used by the live tour to highlight a symbol; cleared on a timer.
-  // Deliberately bold: whole-line warm wash, a thick accent bar in the gutter,
-  // and a full-height marker on the overview ruler so it's impossible to miss.
-  private readonly tourHighlight = vscode.window.createTextEditorDecorationType({
-    isWholeLine: true,
-    backgroundColor: 'rgba(255, 184, 0, 0.20)',
-    borderWidth: '0 0 0 4px',
-    borderStyle: 'solid',
-    borderColor: new vscode.ThemeColor('focusBorder'),
-    overviewRulerColor: 'rgba(255, 184, 0, 0.9)',
-    overviewRulerLane: vscode.OverviewRulerLane.Full,
-  });
-  private highlightClearTimer?: ReturnType<typeof setTimeout>;
+  private readonly promptReviewer = new PromptReviewer();
+  private readonly changeReviewer = new ChangeReviewer();
+  private readonly tourGenerator = new CodebaseTourGenerator();
+
+  /** Send a message to the webview if it's currently resolved. */
+  private readonly post = (msg: unknown) => this._view?.webview.postMessage(msg);
+
+  private readonly tour: TourNavigator;
+  private readonly memory: MemoryService;
+  private readonly vibe: VibeMonitor;
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _store: SessionStore,
   ) {
     this._extensionUri = _context.extensionUri;
-    this._context.subscriptions.push(this.tourHighlight);
 
-    // Listeners for audio vibe events and compiler score updates
+    this.tour = new TourNavigator(_context, this.post);
+    this.memory = new MemoryService(this._extensionUri);
+    this.vibe = new VibeMonitor(this._extensionUri, _context, this.post);
+
+    // Keep the sidebar in sync when the popout planner edits the plan.
     this._context.subscriptions.push(
-      vscode.window.onDidChangeActiveTextEditor(() => this.updateDiagnosticsScore()),
-      vscode.workspace.onDidSaveTextDocument(() => this.handleFileSave()),
-      vscode.tasks.onDidEndTaskProcess((e) => this.handleTaskEnd(e)),
-      vscode.languages.onDidChangeDiagnostics((e) => {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor && e.uris.some(uri => uri.toString() === activeEditor.document.uri.toString())) {
-          this.updateDiagnosticsScore();
-        }
-      }),
-      // Keep the sidebar in sync when the popout planner edits the plan.
-      this._store.onDidChange((plan) => {
-        this._view?.webview.postMessage({ type: 'sessionPlan', value: plan });
-      })
+      this._store.onDidChange((plan) => this.post({ type: 'sessionPlan', value: plan })),
     );
   }
 
@@ -67,36 +52,36 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-    const audioUris = this._getAudioUris(webviewView.webview);
+    const audioUris = this.vibe.audioUris(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage(async (data) => {
       switch (data.type) {
         case 'getAudioUris': {
-          webviewView.webview.postMessage({ type: 'audioUris', value: audioUris });
-          this.updateDiagnosticsScore();
+          this.post({ type: 'audioUris', value: audioUris });
+          this.vibe.updateScore();
           break;
         }
         case 'reviewPrompt': {
           if (!data.value) return;
           try {
             const review = await this.promptReviewer.reviewPrompt(data.value);
-            webviewView.webview.postMessage({ type: 'promptReviewResult', value: review });
+            this.post({ type: 'promptReviewResult', value: review });
           } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            this.post({ type: 'error', value: error.message });
           }
           break;
         }
         case 'reviewChanges': {
           try {
             const review = await this.changeReviewer.reviewChanges();
-            webviewView.webview.postMessage({ type: 'changeReviewResult', value: review });
+            this.post({ type: 'changeReviewResult', value: review });
           } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            this.post({ type: 'error', value: error.message });
           }
           break;
         }
         case 'getSessionPlan': {
-          webviewView.webview.postMessage({ type: 'sessionPlan', value: this._store.get() });
+          this.post({ type: 'sessionPlan', value: this._store.get() });
           break;
         }
         case 'saveSessionPlan': {
@@ -108,18 +93,17 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           try {
             await this._store.generate(data.value);
           } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            this.post({ type: 'error', value: error.message });
           }
           break;
         }
         case 'syncToLinear': {
-          const config = vscode.workspace.getConfiguration('genouk');
-          const apiKey = config.get<string>('linearApiKey');
-          const teamId = config.get<string>('linearTeamId');
-          
+          const apiKey = await getSecret('linear');
+          const teamId = vscode.workspace.getConfiguration('genouk').get<string>('linearTeamId');
+
           if (!apiKey || !teamId) {
-            vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+            vscode.window.showErrorMessage('Set your Linear key via "Genouk: Set API Key" and configure genouk.linearTeamId in settings.');
+            this.post({ type: 'syncToLinearResult', value: { success: false } });
             break;
           }
 
@@ -129,11 +113,11 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           try {
             const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
             await this._store.set(updatedPlan);
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: true } });
+            this.post({ type: 'syncToLinearResult', value: { success: true } });
             vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
           } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
+            this.post({ type: 'error', value: error.message });
+            this.post({ type: 'syncToLinearResult', value: { success: false } });
           }
           break;
         }
@@ -142,355 +126,64 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'getTour': {
-          webviewView.webview.postMessage({ type: 'tourResult', value: this._context.workspaceState.get('codebaseTour') ?? null });
+          this.post({ type: 'tourResult', value: this._context.workspaceState.get('codebaseTour') ?? null });
           break;
         }
         case 'generateTour': {
           try {
             const tour = await this.tourGenerator.generateTour(data.value);
             await this._context.workspaceState.update('codebaseTour', tour);
-            webviewView.webview.postMessage({ type: 'tourResult', value: tour });
+            this.post({ type: 'tourResult', value: tour });
           } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
+            this.post({ type: 'error', value: error.message });
           }
           break;
         }
         case 'openFile': {
-          await this.openWorkspaceFile(data.value);
+          await this.tour.openFile(data.value);
           break;
         }
         case 'revealInFile': {
-          await this.revealInFile(data.value?.file, data.value?.symbol);
+          await this.tour.revealInFile(data.value?.file, data.value?.symbol);
           break;
         }
         case 'setTourPlaying': {
-          await this.setTourPlaying(!!data.value);
+          await this.tour.setPlaying(!!data.value);
           break;
         }
         case 'getMemory': {
-          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          this.post({ type: 'memoryData', value: this.memory.getMemoryData() });
           break;
         }
         case 'writeMcpConfig': {
-          this._writeMcpConfig();
-          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          this.memory.writeConfig();
+          this.post({ type: 'memoryData', value: this.memory.getMemoryData() });
           break;
         }
         case 'copyMcpConfig': {
-          const repoRoot = this._getRepoRoot();
-          if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); break; }
-          await vscode.env.clipboard.writeText(this._mcpConfigJson(repoRoot));
-          vscode.window.showInformationMessage('Genouk: MCP config copied to clipboard.');
+          await this.memory.copyConfig();
           break;
         }
         case 'deleteDigest': {
-          const repoRoot = this._getRepoRoot();
-          if (repoRoot && data.value) deleteDigest(repoRoot, data.value);
-          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          this.memory.deleteDigest(data.value);
+          this.post({ type: 'memoryData', value: this.memory.getMemoryData() });
           break;
         }
         case 'clearMemory': {
-          const repoRoot = this._getRepoRoot();
-          if (repoRoot) clearDigests(repoRoot);
-          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          this.memory.clearAll();
+          this.post({ type: 'memoryData', value: this.memory.getMemoryData() });
           break;
         }
       }
     });
   }
 
-  /** Absolute path of the first workspace folder, or null if none is open. */
-  private _getRepoRoot(): string | null {
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null;
-  }
-
-  /** Filesystem path to the bundled MCP server the agent will spawn. */
-  private _mcpServerPath(): string {
-    return vscode.Uri.joinPath(this._extensionUri, 'dist', 'mcpServer.js').fsPath;
-  }
-
-  /** The genouk-memory entry for an agent's MCP config. */
-  private _mcpServerEntry(repoRoot: string) {
-    return {
-      command: 'node',
-      args: [this._mcpServerPath()],
-      env: { GENOUK_REPO: repoRoot },
-    };
-  }
-
-  /** Pretty .mcp.json snippet to display / copy. */
-  private _mcpConfigJson(repoRoot: string): string {
-    return JSON.stringify({ mcpServers: { 'genouk-memory': this._mcpServerEntry(repoRoot) } }, null, 2);
-  }
-
-  /** Assemble everything the Memory tab needs. */
-  private _getMemoryData() {
-    const repoRoot = this._getRepoRoot();
-    return {
-      digests: repoRoot ? recentDigests(repoRoot, 25) : [],
-      mcpConfig: repoRoot ? this._mcpConfigJson(repoRoot) : '',
-      mcpConfigPath: repoRoot ? path.join(repoRoot, '.mcp.json') : null,
-      configWritten: repoRoot ? this._isConfigWritten(repoRoot) : false,
-      repoLabel: repoRoot ? path.basename(repoRoot) : null,
-    };
-  }
-
-  private _isConfigWritten(repoRoot: string): boolean {
-    try {
-      const existing = JSON.parse(fs.readFileSync(path.join(repoRoot, '.mcp.json'), 'utf8'));
-      return !!existing?.mcpServers?.['genouk-memory'];
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Write (or merge) the genouk-memory server into the repo's .mcp.json. Preserves any
-   * other servers already configured there rather than clobbering the file.
-   */
-  private _writeMcpConfig(): void {
-    const repoRoot = this._getRepoRoot();
-    if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); return; }
-
-    const file = path.join(repoRoot, '.mcp.json');
-    let config: any = {};
-    try {
-      config = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
-    } catch {
-      config = {};
-    }
-    if (!config.mcpServers || typeof config.mcpServers !== 'object') config.mcpServers = {};
-    config.mcpServers['genouk-memory'] = this._mcpServerEntry(repoRoot);
-
-    try {
-      fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
-      vscode.window.showInformationMessage('Genouk: wrote genouk-memory to .mcp.json. Restart your agent to pick it up.');
-    } catch (err: any) {
-      vscode.window.showErrorMessage(`Genouk: couldn't write .mcp.json — ${err?.message ?? err}`);
-    }
-  }
-
   public nextTourStop() {
-    this._view?.webview.postMessage({ type: 'tourStepDelta', value: 1 });
+    this.tour.next();
   }
 
   public previousTourStop() {
-    this._view?.webview.postMessage({ type: 'tourStepDelta', value: -1 });
-  }
-
-  private async setTourPlaying(playing: boolean) {
-    await vscode.commands.executeCommand('setContext', 'genouk.liveTour', playing);
-  }
-
-  /** Open a workspace-relative file path in the editor (best-effort). */
-  private async openWorkspaceFile(relPath: string) {
-    if (!relPath) return;
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return;
-    try {
-      const uri = vscode.Uri.joinPath(folders[0].uri, relPath);
-      const doc = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(doc, { preview: true });
-    } catch {
-      vscode.window.showWarningMessage(`Genouk: couldn't open ${relPath}`);
-    }
-  }
-
-  /**
-   * Open a file and spotlight a symbol inside it: select it, scroll it to the
-   * center, and paint a fading highlight. Used by the live tour to "point at"
-   * the function each stop is about. Falls back to a plain text match, then to
-   * just opening the file if the symbol can't be located.
-   */
-  private async revealInFile(relPath: string, symbol?: string) {
-    if (!relPath) return;
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders || folders.length === 0) return;
-
-    let editor: vscode.TextEditor;
-    let doc: vscode.TextDocument;
-    try {
-      const uri = vscode.Uri.joinPath(folders[0].uri, relPath);
-      doc = await vscode.workspace.openTextDocument(uri);
-      editor = await vscode.window.showTextDocument(doc, { preview: true });
-    } catch {
-      vscode.window.showWarningMessage(`Genouk: couldn't open ${relPath}`);
-      return;
-    }
-
-    let range: vscode.Range | undefined;
-    let how = 'none';
-    const sym = symbol?.trim();
-    if (sym) {
-      const viaSymbols = await this.findSymbolRange(doc.uri, sym);
-      if (viaSymbols) { range = viaSymbols; how = 'symbol-provider'; }
-      else {
-        const viaText = this.findTextRange(doc, sym);
-        if (viaText) { range = viaText; how = 'text-search'; }
-      }
-    }
-
-    if (range) {
-      const line = range.start.line;
-      const lineRange = new vscode.Range(line, 0, range.end.line, doc.lineAt(range.end.line).text.length);
-      editor.selection = new vscode.Selection(range.start, range.end);
-      editor.revealRange(lineRange, vscode.TextEditorRevealType.InCenter);
-      editor.setDecorations(this.tourHighlight, [lineRange]);
-      if (this.highlightClearTimer) clearTimeout(this.highlightClearTimer);
-      this.highlightClearTimer = setTimeout(() => editor.setDecorations(this.tourHighlight, []), 7000);
-      log(`Reveal: ${relPath} → "${sym}" via ${how} at line ${line + 1}.`);
-    } else {
-      editor.revealRange(new vscode.Range(0, 0, 0, 0), vscode.TextEditorRevealType.AtTop);
-      log(`Reveal: ${relPath} → symbol "${sym ?? ''}" NOT found; opened at top.`);
-    }
-  }
-
-  /**
-   * Ask the language server for the symbol's location (most accurate). Retries a
-   * couple of times because the provider is often not ready the instant a file is
-   * first opened (language server warm-up).
-   */
-  private async findSymbolRange(uri: vscode.Uri, name: string): Promise<vscode.Range | undefined> {
-    const needle = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').toLowerCase();
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-          'vscode.executeDocumentSymbolProvider', uri,
-        );
-        if (symbols && symbols.length > 0) {
-          const found = this.searchSymbols(symbols, needle);
-          if (found) return found.selectionRange ?? found.range;
-          return undefined; // provider ready but no match — text search will handle it
-        }
-      } catch {
-        /* retry */
-      }
-      await new Promise((r) => setTimeout(r, 350));
-    }
-    return undefined;
-  }
-
-  private searchSymbols(symbols: vscode.DocumentSymbol[], needle: string): vscode.DocumentSymbol | undefined {
-    // Prefer an exact name match anywhere in the tree, else a contains-match.
-    let contains: vscode.DocumentSymbol | undefined;
-    const visit = (list: vscode.DocumentSymbol[]): vscode.DocumentSymbol | undefined => {
-      for (const s of list) {
-        const n = s.name.toLowerCase();
-        if (n === needle) return s;
-        if (!contains && n.includes(needle)) contains = s;
-        if (s.children?.length) {
-          const hit = visit(s.children);
-          if (hit) return hit;
-        }
-      }
-      return undefined;
-    };
-    return visit(symbols) ?? contains;
-  }
-
-  /** Last-resort: find the literal identifier text in the document. */
-  private findTextRange(doc: vscode.TextDocument, name: string): vscode.Range | undefined {
-    const bare = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').trim();
-    const text = doc.getText();
-    const idx = text.search(new RegExp(`\\b${bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
-    if (idx < 0) return undefined;
-    return new vscode.Range(doc.positionAt(idx), doc.positionAt(idx + bare.length));
-  }
-
-  private updateDiagnosticsScore() {
-    if (!this._view) return;
-
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      this._view.webview.postMessage({
-        type: 'updateVibe',
-        value: {
-          score: null,
-          vibe: 'idle',
-          errorsCount: 0,
-          warningsCount: 0,
-          fileName: ''
-        }
-      });
-      return;
-    }
-
-    const uri = editor.document.uri;
-    const diagnostics = vscode.languages.getDiagnostics(uri);
-
-    let errorsCount = 0;
-    let warningsCount = 0;
-
-    for (const d of diagnostics) {
-      if (d.severity === vscode.DiagnosticSeverity.Error) {
-        errorsCount++;
-      } else if (d.severity === vscode.DiagnosticSeverity.Warning) {
-        warningsCount++;
-      }
-    }
-
-    let score = 100 - (errorsCount * 15) - (warningsCount * 5);
-    score = Math.max(0, Math.min(100, score));
-
-    let vibe = 'fire';
-    if (score < 40) {
-      vibe = 'chaos';
-    } else if (score < 60) {
-      vibe = 'worried';
-    } else if (score < 80) {
-      vibe = 'chill';
-    }
-
-    this._view.webview.postMessage({
-      type: 'updateVibe',
-      value: {
-        score,
-        vibe,
-        errorsCount,
-        warningsCount,
-        fileName: vscode.workspace.asRelativePath(uri)
-      }
-    });
-  }
-
-  private handleFileSave() {
-    if (!this._view) return;
-    this._view.webview.postMessage({ type: 'playSFX', value: 'compile' });
-  }
-
-  private handleTaskEnd(e: vscode.TaskProcessEndEvent) {
-    if (!this._view) return;
-    const taskName = e.execution.task.name.toLowerCase();
-    if (taskName.includes('build') || taskName.includes('compile') || taskName.includes('watch') || taskName.includes('bundle')) {
-      if (e.exitCode === 0) {
-        this._view.webview.postMessage({ type: 'playSFX', value: 'compile-success' });
-      } else {
-        this._view.webview.postMessage({ type: 'playSFX', value: 'compile-error' });
-      }
-    }
-  }
-
-  private _getAudioUris(webview: vscode.Webview) {
-    const filenames = [
-      'vibe-idle.mp3',
-      'vibe-fire.mp3',
-      'vibe-chill.mp3',
-      'vibe-worried.mp3',
-      'vibe-chaos.mp3',
-      'vibe-compile.mp3',
-      'compile-success.mp3',
-      'compile-error.mp3'
-    ];
-
-    const uris: Record<string, string> = {};
-    for (const filename of filenames) {
-      const key = filename.replace('.mp3', '');
-      const uri = webview.asWebviewUri(
-        vscode.Uri.joinPath(this._extensionUri, 'media', 'sounds', filename)
-      );
-      uris[key] = uri.toString();
-    }
-    return uris;
+    this.tour.previous();
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {

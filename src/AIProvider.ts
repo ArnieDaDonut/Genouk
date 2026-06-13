@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { getSecret } from './secrets';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
@@ -40,17 +41,8 @@ interface ResolvedOptions {
  */
 export class AIProvider {
   private static instance: AIProvider;
-  private groq?: Groq;
-  private geminiKey?: string;
 
-  private constructor() {
-    this.initialize();
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('genouk.groqApiKey') || e.affectsConfiguration('genouk.geminiApiKey')) {
-        this.initialize();
-      }
-    });
-  }
+  private constructor() {}
 
   public static getInstance(): AIProvider {
     if (!AIProvider.instance) {
@@ -59,25 +51,21 @@ export class AIProvider {
     return AIProvider.instance;
   }
 
-  private initialize() {
-    const config = vscode.workspace.getConfiguration('genouk');
-
-    const groqKey = config.get<string>('groqApiKey') || process.env.GROQ_API_KEY;
-    // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
-    // the Retry-After header — bumped from the default 2 so a brief rate-limit
-    // spike self-heals before we fall through to Gemini.
-    this.groq = groqKey ? new Groq({ apiKey: groqKey, maxRetries: 4 }) : undefined;
-
-    this.geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY || undefined;
-  }
-
-  /** Providers to try, in order, given the keys currently configured. */
-  private providers(): Provider[] {
+  /**
+   * Providers to try, in order, given the keys currently configured. Keys are
+   * resolved from SecretStorage (then legacy settings, then env) on each call so
+   * a freshly-set key is picked up immediately with no restart.
+   */
+  private async providers(): Promise<Provider[]> {
     const config = vscode.workspace.getConfiguration('genouk');
     const list: Provider[] = [];
 
-    if (this.groq) {
-      const groq = this.groq;
+    const groqKey = await getSecret('groq');
+    if (groqKey) {
+      // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
+      // the Retry-After header — bumped from the default 2 so a brief rate-limit
+      // spike self-heals before we fall through to Gemini.
+      const groq = new Groq({ apiKey: groqKey, maxRetries: 4 });
       const groqModel = config.get<string>('model') || DEFAULT_MODEL;
       list.push({
         name: 'Groq',
@@ -96,8 +84,9 @@ export class AIProvider {
       });
     }
 
-    if (this.geminiKey) {
-      const key = this.geminiKey;
+    const geminiKey = await getSecret('gemini');
+    if (geminiKey) {
+      const key = geminiKey;
       const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
       list.push({
         name: 'Gemini',
@@ -125,10 +114,10 @@ export class AIProvider {
       model: options.model,
     };
 
-    const providers = this.providers();
+    const providers = await this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Add a free Groq key (genouk.groqApiKey) or Gemini key (genouk.geminiApiKey) in settings.',
+        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a free Groq or Gemini key.',
       );
     }
 

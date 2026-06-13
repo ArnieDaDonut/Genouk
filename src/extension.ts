@@ -5,10 +5,14 @@ import { PlannerPanel } from './PlannerPanel';
 
 import { LinearService } from './LinearService';
 import { TodoScanner } from './TodoScanner';
+import { initSecrets, migrateSettingsKeysToSecrets, promptToSetApiKey, getSecret } from './secrets';
 import * as path from 'path';
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Genouk extension is now active!');
+  // Credentials live in encrypted SecretStorage; migrate any legacy plaintext
+  // keys out of settings.json on first activation.
+  initSecrets(context);
+  void migrateSettingsKeysToSecrets();
 
   const store = new SessionStore(context);
   context.subscriptions.push(store);
@@ -23,6 +27,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('genouk.openPlanner', () => {
       PlannerPanel.createOrShow(context.extensionUri, store);
     }),
+    vscode.commands.registerCommand('genouk.setApiKey', () => promptToSetApiKey()),
     vscode.commands.registerCommand('genouk.tourNext', () => {
       sidebarProvider.nextTourStop();
     }),
@@ -37,11 +42,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       const config = vscode.workspace.getConfiguration('genouk');
-      const apiKey = config.get<string>('linearApiKey');
+      const apiKey = await getSecret('linear');
       const teamId = config.get<string>('linearTeamId');
 
       if (!apiKey || !teamId) {
-        vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
+        vscode.window.showErrorMessage('Set your Linear key via "Genouk: Set API Key" and configure genouk.linearTeamId in settings.');
         return;
       }
 

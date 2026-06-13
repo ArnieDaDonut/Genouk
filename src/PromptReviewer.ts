@@ -39,7 +39,10 @@ Then rewrite it into a STRONG, DETAILED prompt — do not just trim the original
 - End with verifiable success criteria (how the developer will know the output is correct).
 Favor completeness and precision over brevity — it is fine for the rewrite to be noticeably longer than the original if that detail removes ambiguity. Only fold in assumptions you are confident about; leave genuinely optional choices for the suggestions list below.
 
-"suggestions" is a list of 2-5 OPTIONAL, high-value additions the developer might want to make but that you deliberately did NOT bake into the rewrite (because they require a decision only they can make). Phrase each as an invitation, e.g. "Consider naming the exact target file so the model doesn't guess", "If you have a test framework, ask for tests too", "Add an example of the desired output shape". Make them specific to this prompt and repo, not generic.
+"suggestions" is a list of 2-5 OPTIONAL, high-value ideas the developer might want to act on. These fall into TWO kinds, and you may mix them:
+1. PROMPT additions you deliberately did NOT bake into the rewrite (because they require a decision only the developer can make), phrased as an invitation, e.g. "Consider naming the exact target file so the model doesn't guess", "If you have a test framework, ask for tests too", "Add an example of the desired output shape".
+2. CODEBASE improvements unrelated to the prompt — things you noticed in the REPOSITORY CONTEXT that would benefit the code overall regardless of this task: missing tests, an absent lint/format setup, risky or outdated dependencies, an empty README, dead/duplicated areas, weak error handling, missing types, build/CI gaps, etc. Prefix these with "Codebase: " so they are visually distinct, e.g. "Codebase: there's no lint script wired up — adding ESLint would catch issues npm run compile misses".
+Make every suggestion specific to THIS prompt and repo, grounded in the actual context (filenames, deps, commits). No generic advice. It is fine for some or all suggestions to be of kind 2 if the prompt itself needs little, but always include at least one codebase-improvement idea when the context reveals one.
 
 Estimate token counts as words * 1.3 (the UI recomputes these from the actual text, so approximate is fine).
 

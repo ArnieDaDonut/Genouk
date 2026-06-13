@@ -30,6 +30,11 @@
         "icon": "$(window)"
       },
       {
+        "command": "genouk.setApiKey",
+        "title": "Genouk: Set API Key",
+        "icon": "$(key)"
+      },
+      {
         "command": "genouk.syncTodosToLinear",
         "title": "Genouk: Sync TODOs in Active File to Linear",
         "icon": "$(sync)"
@@ -84,8 +89,8 @@
         "genouk.groqApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Groq API key for Genouk AI.",
-          "markdownDescription": "Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
+          "description": "Fallback Groq API key. Prefer the \"Genouk: Set API Key\" command, which stores it in the OS keychain instead of plaintext settings.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
         },
         "genouk.model": {
           "type": "string",
@@ -95,8 +100,8 @@
         "genouk.geminiApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Google Gemini API key — used as a free fallback when Groq is rate-limited.",
-          "markdownDescription": "Free fallback provider. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
+          "description": "Fallback Gemini API key (used when Groq is rate-limited). Prefer the \"Genouk: Set API Key\" command, which stores it securely.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
         },
         "genouk.geminiModel": {
           "type": "string",
@@ -120,8 +125,8 @@
         "genouk.linearApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Linear Personal API Key.",
-          "markdownDescription": "Used to sync your session tasks to Linear. Generate one at [linear.app/settings/api](https://linear.app/settings/api)."
+          "description": "Fallback Linear Personal API Key. Prefer the \"Genouk: Set API Key\" command, which stores it securely.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Generate one at [linear.app/settings/api](https://linear.app/settings/api)."
         },
         "genouk.linearTeamId": {
           "type": "string",
@@ -150,9 +155,6 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.1",
-    "@google/genai": "^2.8.0",
-    "@google/generative-ai": "^0.14.0",
     "@linear/sdk": "^86.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
