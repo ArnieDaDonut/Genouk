@@ -23,6 +23,13 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "genouk.openPlanner",
+        "title": "Genouk: Open Planner Window",
+        "icon": "$(window)"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
