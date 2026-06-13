@@ -16,10 +16,10 @@ interface Props {
 }
 
 const TIERS: { tier: MusicTier; label: string; range: string; color: string }[] = [
-  { tier: 'triumphant', label: 'Triumphant', range: '80–96', color: t.color.good },
-  { tier: 'good', label: 'Warm', range: '60–79', color: t.color.accent },
-  { tier: 'uneasy', label: 'Uneasy', range: '40–59', color: t.color.warn },
-  { tier: 'chaos', label: 'Dissonant', range: '0–39', color: t.color.bad },
+  { tier: 'triumphant', label: 'Green win', range: '80-96', color: t.color.good },
+  { tier: 'good', label: 'Solid', range: '60-79', color: t.color.accent },
+  { tier: 'uneasy', label: 'Medium', range: '40-59', color: t.color.warn },
+  { tier: 'chaos', label: 'Bad', range: '0-39', color: t.color.bad },
 ];
 
 /**
@@ -36,8 +36,8 @@ export const AudioTab: React.FC<Props> = ({ volume, setVolume, muted, setMuted, 
           <Label>Score-reactive music</Label>
         </div>
         <p style={{ margin: '4px 0 12px', fontSize: t.font.size.base, color: t.color.muted, lineHeight: 1.4 }}>
-          When you review a prompt, Genouk synthesizes a short phrase that matches the score —
-          triumphant when it's sharp, dissonant when it's broken. Tap a tier to preview.
+          When you review a prompt, Genouk plays a short phrase on real instruments that matches the score —
+          a dissonant low-brass hit when it's weak, a tense cello in the middle, and a bright trumpet fanfare when it's green. Tap a tier to preview.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: t.space.xs }}>

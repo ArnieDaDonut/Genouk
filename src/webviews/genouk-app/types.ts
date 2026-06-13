@@ -50,6 +50,30 @@ export interface VibeState {
   fileName: string;
 }
 
+/** A stored cross-chat session digest (mirrors src/memory/sessionMemoryStore.ts). */
+export interface SessionDigest {
+  id: string;
+  ts: string;
+  title: string;
+  summary: string;
+  decisions: string[];
+  files: string[];
+  openThreads: string[];
+}
+
+/** Everything the Memory tab needs: stored digests + how to wire the MCP server up. */
+export interface MemoryData {
+  digests: SessionDigest[];
+  /** Pretty-printed .mcp.json snippet the user can copy into their agent. */
+  mcpConfig: string;
+  /** Absolute path where Genouk writes .mcp.json (the repo root), or null if no repo. */
+  mcpConfigPath: string | null;
+  /** True once a genouk-memory entry exists in the repo's .mcp.json. */
+  configWritten: boolean;
+  /** Short label for the active repo (basename), or null if no folder is open. */
+  repoLabel: string | null;
+}
+
 /** Rough token estimate: words * 1.3 (matches the reviewer's own heuristic). */
 export function estimateTokens(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;

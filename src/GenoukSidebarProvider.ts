@@ -7,6 +7,9 @@ import { PlannerPanel } from './PlannerPanel';
 import { LinearService } from './LinearService';
 import { getNonce } from './webviewHtml';
 import { log } from './log';
+import { recentDigests, deleteDigest, clearDigests } from './memory/sessionMemoryStore';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
@@ -164,8 +167,107 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           await this.setTourPlaying(!!data.value);
           break;
         }
+        case 'getMemory': {
+          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          break;
+        }
+        case 'writeMcpConfig': {
+          this._writeMcpConfig();
+          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          break;
+        }
+        case 'copyMcpConfig': {
+          const repoRoot = this._getRepoRoot();
+          if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); break; }
+          await vscode.env.clipboard.writeText(this._mcpConfigJson(repoRoot));
+          vscode.window.showInformationMessage('Genouk: MCP config copied to clipboard.');
+          break;
+        }
+        case 'deleteDigest': {
+          const repoRoot = this._getRepoRoot();
+          if (repoRoot && data.value) deleteDigest(repoRoot, data.value);
+          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          break;
+        }
+        case 'clearMemory': {
+          const repoRoot = this._getRepoRoot();
+          if (repoRoot) clearDigests(repoRoot);
+          webviewView.webview.postMessage({ type: 'memoryData', value: this._getMemoryData() });
+          break;
+        }
       }
     });
+  }
+
+  /** Absolute path of the first workspace folder, or null if none is open. */
+  private _getRepoRoot(): string | null {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? null;
+  }
+
+  /** Filesystem path to the bundled MCP server the agent will spawn. */
+  private _mcpServerPath(): string {
+    return vscode.Uri.joinPath(this._extensionUri, 'dist', 'mcpServer.js').fsPath;
+  }
+
+  /** The genouk-memory entry for an agent's MCP config. */
+  private _mcpServerEntry(repoRoot: string) {
+    return {
+      command: 'node',
+      args: [this._mcpServerPath()],
+      env: { GENOUK_REPO: repoRoot },
+    };
+  }
+
+  /** Pretty .mcp.json snippet to display / copy. */
+  private _mcpConfigJson(repoRoot: string): string {
+    return JSON.stringify({ mcpServers: { 'genouk-memory': this._mcpServerEntry(repoRoot) } }, null, 2);
+  }
+
+  /** Assemble everything the Memory tab needs. */
+  private _getMemoryData() {
+    const repoRoot = this._getRepoRoot();
+    return {
+      digests: repoRoot ? recentDigests(repoRoot, 25) : [],
+      mcpConfig: repoRoot ? this._mcpConfigJson(repoRoot) : '',
+      mcpConfigPath: repoRoot ? path.join(repoRoot, '.mcp.json') : null,
+      configWritten: repoRoot ? this._isConfigWritten(repoRoot) : false,
+      repoLabel: repoRoot ? path.basename(repoRoot) : null,
+    };
+  }
+
+  private _isConfigWritten(repoRoot: string): boolean {
+    try {
+      const existing = JSON.parse(fs.readFileSync(path.join(repoRoot, '.mcp.json'), 'utf8'));
+      return !!existing?.mcpServers?.['genouk-memory'];
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Write (or merge) the genouk-memory server into the repo's .mcp.json. Preserves any
+   * other servers already configured there rather than clobbering the file.
+   */
+  private _writeMcpConfig(): void {
+    const repoRoot = this._getRepoRoot();
+    if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); return; }
+
+    const file = path.join(repoRoot, '.mcp.json');
+    let config: any = {};
+    try {
+      config = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
+    } catch {
+      config = {};
+    }
+    if (!config.mcpServers || typeof config.mcpServers !== 'object') config.mcpServers = {};
+    config.mcpServers['genouk-memory'] = this._mcpServerEntry(repoRoot);
+
+    try {
+      fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
+      vscode.window.showInformationMessage('Genouk: wrote genouk-memory to .mcp.json. Restart your agent to pick it up.');
+    } catch (err: any) {
+      vscode.window.showErrorMessage(`Genouk: couldn't write .mcp.json — ${err?.message ?? err}`);
+    }
   }
 
   public nextTourStop() {
@@ -401,6 +503,9 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
     const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
+    // Base URI for the bundled instrument samples (trumpet, strings, etc.) that the
+    // music engine loads via Tone.Sampler. Trailing slash so it can be used as a baseUrl.
+    const samplesUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'samples'));
 
     const nonce = getNonce();
 
@@ -408,7 +513,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       <html lang="en">
       <head>
         <meta charset="UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; media-src ${webview.cspSource} https:; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https:;">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; media-src ${webview.cspSource} https:; connect-src ${webview.cspSource}; script-src 'nonce-${nonce}'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https:;">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Genouk Assistant</title>
       </head>
@@ -422,6 +527,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
           window.PET_TOUR_SPRITE = "${tourSpriteUri}";
+          window.GENOUK_SAMPLES = "${samplesUri}/";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;

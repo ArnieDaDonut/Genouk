@@ -1,9 +1,14 @@
 /**
- * Score-reactive music. Instead of shipping pre-baked MP3s, we synthesize a short
- * musical phrase on the fly with Tone.js whenever a prompt review comes back — the
- * better the score, the brighter and more triumphant the phrase; the worse, the more
- * tense and dissonant. Everything runs offline in the webview (no API key, no network,
- * no latency), which matters because this webview's CSP blocks outbound requests.
+ * Score-reactive music. When a prompt review comes back, Genouk plays a short phrase
+ * voiced on real sampled instruments — trumpet, french horn, strings, flute, harp —
+ * whose mood matches the score: a bright brass fanfare when it's green, warm strings
+ * when it's solid, a tense solo cello when it needs work, and a dissonant low-brass hit
+ * when it's bad.
+ *
+ * The samples ship inside the extension (public/samples/<instrument>/*.mp3) and are
+ * loaded with Tone.Sampler, which pitch-shifts a handful of recorded notes across the
+ * whole range. They load over the webview's own URI (the CSP grants connect-src for
+ * `${webview.cspSource}`), so there's still no external network dependency at runtime.
  */
 import * as Tone from 'tone';
 
@@ -15,40 +20,54 @@ export interface MusicCue {
   label: string;
 }
 
+/** Base webview URI for the bundled samples, injected by the extension HTML. */
+const SAMPLES: string = (typeof window !== 'undefined' && (window as any).GENOUK_SAMPLES) || '';
+
 let audioStarted = false;
+let samplesReady = false;
+
+// Master chain: instruments → reverb (concert-hall space) → EQ (gentle polish) → limiter.
+let limiter: Tone.Limiter | null = null;
+let masterEq: Tone.EQ3 | null = null;
 let reverb: Tone.Reverb | null = null;
-let leadSynth: Tone.PolySynth | null = null;
-let bellSynth: Tone.Synth | null = null;
-let bassSynth: Tone.Synth | null = null;
+
+// Sampled instruments.
+let trumpet: Tone.Sampler | null = null;
+let horn: Tone.Sampler | null = null;
+let cello: Tone.Sampler | null = null;
+let violin: Tone.Sampler | null = null;
+let flute: Tone.Sampler | null = null;
+let harp: Tone.Sampler | null = null;
 
 /**
  * Web Audio refuses to start until a user gesture. Call this from inside a click
- * handler (e.g. "Review prompt") so the context is live by the time a phrase plays.
+ * handler (e.g. "Review prompt"); it starts the context, builds the instruments, and
+ * resolves once every sample buffer has loaded so the first phrase plays in full.
  */
 export async function ensureAudio(): Promise<void> {
-  if (audioStarted) return;
+  if (audioStarted) {
+    if (!samplesReady) await Tone.loaded();
+    return;
+  }
   await Tone.start();
   audioStarted = true;
 
-  reverb = new Tone.Reverb({ decay: 2.4, wet: 0.28 }).toDestination();
+  limiter = new Tone.Limiter(-1).toDestination();
+  masterEq = new Tone.EQ3({ low: 1.5, mid: 0, high: -1.5, lowFrequency: 250, highFrequency: 4000 }).connect(limiter);
+  reverb = new Tone.Reverb({ decay: 3.6, preDelay: 0.02, wet: 0.28 }).connect(masterEq);
 
-  leadSynth = new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: 'triangle' },
-    envelope: { attack: 0.01, decay: 0.18, sustain: 0.25, release: 0.5 },
-  }).connect(reverb);
-  leadSynth.volume.value = -6;
+  const make = (instrument: string, urls: Record<string, string>, db: number, release = 1): Tone.Sampler =>
+    new Tone.Sampler({ urls, baseUrl: `${SAMPLES}${instrument}/`, release, volume: db }).connect(reverb!);
 
-  bellSynth = new Tone.Synth({
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.005, decay: 0.4, sustain: 0, release: 0.6 },
-  }).connect(reverb);
-  bellSynth.volume.value = -10;
+  trumpet = make('trumpet', { A3: 'A3.mp3', C4: 'C4.mp3', F4: 'F4.mp3', G4: 'G4.mp3', 'A#4': 'As4.mp3', D5: 'D5.mp3', A5: 'A5.mp3', C6: 'C6.mp3' }, -9, 0.6);
+  horn = make('french-horn', { C2: 'C2.mp3', F3: 'F3.mp3', A3: 'A3.mp3', C4: 'C4.mp3', D5: 'D5.mp3' }, -11, 1.4);
+  cello = make('cello', { C2: 'C2.mp3', G2: 'G2.mp3', C3: 'C3.mp3', E3: 'E3.mp3', G3: 'G3.mp3', C4: 'C4.mp3', E4: 'E4.mp3', A4: 'A4.mp3' }, -10, 1.2);
+  violin = make('violin', { G3: 'G3.mp3', C4: 'C4.mp3', E4: 'E4.mp3', G4: 'G4.mp3', A4: 'A4.mp3', C5: 'C5.mp3', E5: 'E5.mp3', A5: 'A5.mp3' }, -12, 1.0);
+  flute = make('flute', { C4: 'C4.mp3', E4: 'E4.mp3', A4: 'A4.mp3', C5: 'C5.mp3', E5: 'E5.mp3', A5: 'A5.mp3' }, -13, 0.8);
+  harp = make('harp', { C3: 'C3.mp3', E3: 'E3.mp3', G3: 'G3.mp3', C5: 'C5.mp3', E5: 'E5.mp3', A6: 'A6.mp3' }, -11, 1.6);
 
-  bassSynth = new Tone.Synth({
-    oscillator: { type: 'sawtooth' },
-    envelope: { attack: 0.02, decay: 0.25, sustain: 0.3, release: 0.5 },
-  }).connect(reverb);
-  bassSynth.volume.value = -14;
+  await Tone.loaded();
+  samplesReady = true;
 }
 
 /** Master volume in 0..1 (linear), with mute. Mirrors the webview's volume slider. */
@@ -65,16 +84,15 @@ export function scoreToTier(score: number): MusicTier {
 }
 
 const TIER_LABEL: Record<MusicTier, string> = {
-  triumphant: 'Triumphant fanfare — that prompt is sharp.',
-  good: 'Warm major chord — solid, minor gaps.',
-  uneasy: 'Tense minor phrase — this one needs work.',
-  chaos: 'Dissonant alarm — the prompt is broken.',
+  triumphant: 'Brass fanfare — that prompt is sharp.',
+  good: 'Warm strings — good prompt, still room to tighten.',
+  uneasy: 'Tense cello — this prompt needs work.',
+  chaos: 'Dissonant hit — the prompt is in rough shape.',
 };
 
 /**
- * Synthesize and play a ~2s phrase for the given score tier. Returns the cue so the
- * UI can show what just played. Safe to call repeatedly; phrases are short and overlap
- * gracefully.
+ * Play a phrase for the given score tier. Returns the cue so the UI can show what just
+ * played. Safe to call repeatedly; phrases are short and overlap gracefully.
  */
 export function playForScore(score: number): MusicCue {
   const tier = scoreToTier(score);
@@ -83,46 +101,73 @@ export function playForScore(score: number): MusicCue {
 }
 
 export function playTier(tier: MusicTier): MusicCue {
-  if (!audioStarted || !leadSynth || !bellSynth || !bassSynth) {
+  if (!samplesReady || !trumpet || !horn || !cello || !violin || !flute || !harp) {
     return { tier, label: TIER_LABEL[tier] };
   }
-  const now = Tone.now() + 0.05;
+  const now = Tone.now() + 0.06;
   PHRASES[tier](now);
   return { tier, label: TIER_LABEL[tier] };
 }
 
 type Phrase = (t: number) => void;
 
-const lead = (notes: string[], start: number, step: number, dur: string, vel = 0.8) => {
-  notes.forEach((n, i) => leadSynth!.triggerAttackRelease(n, dur, start + i * step, vel));
+/** Play a melodic run on one instrument, one note per step. */
+const run = (inst: Tone.Sampler, notes: string[], start: number, step: number, dur: Tone.Unit.Time, vel = 0.8) => {
+  notes.forEach((n, i) => inst.triggerAttackRelease(n, dur, start + i * step, vel));
 };
 
 const PHRASES: Record<MusicTier, Phrase> = {
-  // Bright C-major fanfare: rising arpeggio resolving on a major chord + a high sparkle.
+  // Bright C-major brass fanfare: french-horn + cello bed, a harp arpeggio sweep up,
+  // and a trumpet call (IV–V–I) that lands on a held major triad with high harp sparkle.
   triumphant: (t) => {
-    bassSynth!.triggerAttackRelease('C2', '0.5', t, 0.9);
-    lead(['C4', 'E4', 'G4', 'C5'], t, 0.12, '0.16', 0.85);
-    leadSynth!.triggerAttackRelease(['C5', 'E5', 'G5'], '0.9', t + 0.5, 0.9);
-    bellSynth!.triggerAttackRelease('C6', '0.8', t + 0.62, 0.7);
-    bellSynth!.triggerAttackRelease('G6', '0.8', t + 0.8, 0.5);
+    horn!.triggerAttackRelease(['C3', 'E3', 'G3'], 2.6, t, 0.6);
+    horn!.triggerAttackRelease(['F3', 'A3', 'C4'], 0.8, t + 1.15, 0.55);
+    horn!.triggerAttackRelease(['G3', 'B3', 'D4'], 0.7, t + 1.6, 0.6);
+    cello!.triggerAttackRelease('C2', 1.1, t, 0.8);
+    cello!.triggerAttackRelease('G2', 0.5, t + 1.15, 0.7);
+    cello!.triggerAttackRelease('C2', 1.4, t + 1.6, 0.85);
+    run(harp!, ['C4', 'E4', 'G4', 'C5', 'E5', 'G5'], t + 0.02, 0.07, 1.2, 0.65);
+    // Trumpet fanfare: a confident rising call resolving to the tonic triad.
+    trumpet!.triggerAttackRelease('G4', 0.18, t + 0.1, 0.85);
+    trumpet!.triggerAttackRelease('G4', 0.18, t + 0.32, 0.8);
+    trumpet!.triggerAttackRelease('C5', 0.32, t + 0.54, 0.9);
+    trumpet!.triggerAttackRelease('E5', 0.5, t + 0.86, 0.92);
+    trumpet!.triggerAttackRelease(['C5', 'E5', 'G5'], 1.7, t + 1.6, 0.95);
+    harp!.triggerAttackRelease('C6', 1.6, t + 1.66, 0.6);
+    harp!.triggerAttackRelease('E6', 1.5, t + 1.82, 0.5);
+    harp!.triggerAttackRelease('G6', 1.6, t + 1.98, 0.42);
   },
-  // Warm, settled C-major chord with a gentle rising tail.
+  // Warm and content F major: a violin string bed with a gentle rising flute motif that
+  // resolves but holds back the full victory. "Good — keep going."
   good: (t) => {
-    bassSynth!.triggerAttackRelease('C2', '0.6', t, 0.8);
-    leadSynth!.triggerAttackRelease(['C4', 'E4', 'G4'], '0.7', t, 0.8);
-    lead(['G4', 'A4', 'C5'], t + 0.45, 0.16, '0.2', 0.7);
+    violin!.triggerAttackRelease(['F3', 'A3', 'C4'], 2.2, t, 0.55);
+    violin!.triggerAttackRelease(['E4', 'G4', 'C5'], 1.3, t + 1.4, 0.5);
+    cello!.triggerAttackRelease('F2', 1.1, t, 0.7);
+    cello!.triggerAttackRelease('C3', 1.0, t + 1.4, 0.6);
+    flute!.triggerAttackRelease('A4', 0.42, t + 0.25, 0.7);
+    flute!.triggerAttackRelease('C5', 0.42, t + 0.6, 0.72);
+    flute!.triggerAttackRelease('D5', 0.5, t + 0.95, 0.7);
+    flute!.triggerAttackRelease('C5', 1.4, t + 1.4, 0.78);
   },
-  // A-minor, slower and a touch wavering — workable but uneasy.
+  // Suspended A minor on solo cello: a slow, slightly chromatic descent that never lands
+  // on the tonic, with a thin high violin holding the tension. Clearly unresolved.
   uneasy: (t) => {
-    bassSynth!.triggerAttackRelease('A1', '0.7', t, 0.85);
-    leadSynth!.triggerAttackRelease(['A3', 'C4', 'E4'], '0.8', t, 0.75);
-    lead(['E4', 'D4', 'C4'], t + 0.5, 0.18, '0.22', 0.6);
+    cello!.triggerAttackRelease(['A2', 'E3'], 2.4, t, 0.6);
+    cello!.triggerAttackRelease('A3', 0.7, t + 0.1, 0.6);
+    run(cello!, ['E3', 'D3', 'C3', 'B2'], t + 0.7, 0.42, 0.6, 0.55);
+    // Unresolved suspension: a Bsus over F, no tonic landing.
+    cello!.triggerAttackRelease(['B2', 'F3'], 1.8, t + 1.6, 0.5);
+    violin!.triggerAttackRelease('D5', 1.8, t + 1.6, 0.32);
   },
-  // Diminished cluster + a downward chromatic stumble — something is broken.
+  // Dark and dissonant: a low french-horn/cello cluster with a tritone, a stabbed
+  // trumpet cluster, and a falling chromatic collapse. The "this is bad" hit.
   chaos: (t) => {
-    bassSynth!.triggerAttackRelease('C2', '0.9', t, 0.9);
-    bassSynth!.triggerAttackRelease('C#2', '0.9', t + 0.04, 0.7);
-    leadSynth!.triggerAttackRelease(['C4', 'Eb4', 'Gb4', 'A4'], '0.9', t, 0.8);
-    lead(['A4', 'Ab4', 'G4', 'Gb4', 'F4'], t + 0.45, 0.12, '0.16', 0.6);
+    horn!.triggerAttackRelease(['C2', 'F#2'], 1.8, t, 0.65);
+    cello!.triggerAttackRelease('C2', 0.6, t, 0.85);
+    cello!.triggerAttackRelease('F#2', 0.7, t + 0.45, 0.75);
+    trumpet!.triggerAttackRelease(['C4', 'F#4', 'B4'], 0.4, t + 0.08, 0.8);
+    trumpet!.triggerAttackRelease(['B3', 'F4', 'A4'], 0.4, t + 0.5, 0.72);
+    run(trumpet!, ['G4', 'F#4', 'F4', 'E4', 'D#4', 'D4'], t + 1.0, 0.11, 0.24, 0.62);
+    cello!.triggerAttackRelease('C2', 1.4, t + 1.7, 0.7);
   },
 };

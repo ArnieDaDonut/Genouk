@@ -16,6 +16,21 @@ const extensionOptions = {
   logLevel: 'info',
 };
 
+// Standalone MCP memory server. Runs as its own Node process (launched by the user's
+// agent), so it bundles its deps and excludes vscode entirely.
+const mcpServerOptions = {
+  entryPoints: { mcpServer: 'src/memory/mcpServer.ts' },
+  bundle: true,
+  outdir: 'dist',
+  format: 'cjs',
+  platform: 'node',
+  target: 'node18',
+  sourcemap: !production,
+  minify: production,
+  logLevel: 'info',
+  banner: { js: '#!/usr/bin/env node' },
+};
+
 const webviewOptions = {
   entryPoints: { genoukApp: 'src/webviews/genouk-app/index.tsx' },
   bundle: true,
@@ -33,15 +48,17 @@ const webviewOptions = {
 
 async function main() {
   if (watch) {
-    const [extCtx, webCtx] = await Promise.all([
+    const [extCtx, mcpCtx, webCtx] = await Promise.all([
       esbuild.context(extensionOptions),
+      esbuild.context(mcpServerOptions),
       esbuild.context(webviewOptions),
     ]);
-    await Promise.all([extCtx.watch(), webCtx.watch()]);
+    await Promise.all([extCtx.watch(), mcpCtx.watch(), webCtx.watch()]);
     console.log('👀 esbuild watching for changes...');
   } else {
     await Promise.all([
       esbuild.build(extensionOptions),
+      esbuild.build(mcpServerOptions),
       esbuild.build(webviewOptions),
     ]);
     console.log('✅ Build complete');

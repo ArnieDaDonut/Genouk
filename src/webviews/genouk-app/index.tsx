@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Square, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Square, Brain, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
-import { PromptReviewResult, SessionPlan, CodebaseTour, VibeState } from './types';
+import { PromptReviewResult, SessionPlan, CodebaseTour, VibeState, MemoryData } from './types';
 import { PromptTab } from './PromptTab';
 import { ChangesTab } from './ChangesTab';
 import { SessionTab } from './SessionTab';
 import { TourTab } from './TourTab';
 import { AudioTab } from './AudioTab';
+import { MemoryTab } from './MemoryTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
@@ -26,13 +27,14 @@ const BREAK_NUDGES = [
 
 declare const window: any;
 
-type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'audio';
+type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'memory' | 'audio';
 
 const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'prompts', label: 'Prompts', Icon: Sparkles },
   { id: 'session', label: 'Session', Icon: ListTodo },
   { id: 'tour', label: 'Tour', Icon: Compass },
   { id: 'changes', label: 'Changes', Icon: GitBranch },
+  { id: 'memory', label: 'Memory', Icon: Brain },
   { id: 'audio', label: 'Sounds', Icon: Volume2 },
 ];
 
@@ -66,6 +68,10 @@ const App = () => {
   // Session
   const [sessionPlan, setSessionPlan] = useState<SessionPlan | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Cross-chat memory (MCP server digests)
+  const [memoryData, setMemoryData] = useState<MemoryData | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(true);
 
   // Codebase tour
   const [tour, setTour] = useState<CodebaseTour | null>(null);
@@ -180,6 +186,10 @@ const App = () => {
           setTour(message.value);
           setTourLoading(false);
           break;
+        case 'memoryData':
+          setMemoryData(message.value);
+          setMemoryLoading(false);
+          break;
         case 'promptReviewResult':
           setReview(message.value);
           setPromptLoading(false);
@@ -217,6 +227,7 @@ const App = () => {
     vscode.postMessage({ type: 'getAudioUris' });
     vscode.postMessage({ type: 'getSessionPlan' });
     vscode.postMessage({ type: 'getTour' });
+    vscode.postMessage({ type: 'getMemory' });
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -329,6 +340,16 @@ const App = () => {
   const handleOpenFile = (file: string) => {
     vscode.postMessage({ type: 'openFile', value: file });
   };
+
+  // Cross-chat memory handlers
+  const refreshMemory = () => {
+    setMemoryLoading(true);
+    vscode.postMessage({ type: 'getMemory' });
+  };
+  const handleWriteMcpConfig = () => vscode.postMessage({ type: 'writeMcpConfig' });
+  const handleCopyMcpConfig = () => vscode.postMessage({ type: 'copyMcpConfig' });
+  const handleDeleteDigest = (id: string) => vscode.postMessage({ type: 'deleteDigest', value: id });
+  const handleClearMemory = () => vscode.postMessage({ type: 'clearMemory' });
 
   const startLiveTour = () => {
     if (!tour || tour.stops.length === 0) return;
@@ -592,6 +613,17 @@ const App = () => {
         )}
         {activeTab === 'changes' && (
           <ChangesTab changeReview={changeReview} loading={changeLoading} onReview={handleReviewChanges} />
+        )}
+        {activeTab === 'memory' && (
+          <MemoryTab
+            data={memoryData}
+            loading={memoryLoading}
+            onWriteConfig={handleWriteMcpConfig}
+            onCopyConfig={handleCopyMcpConfig}
+            onRefresh={refreshMemory}
+            onDelete={handleDeleteDigest}
+            onClear={handleClearMemory}
+          />
         )}
         {activeTab === 'audio' && (
           <AudioTab
