@@ -41,6 +41,17 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   logger.info('✅ Detonate active. Press Cmd+Shift+D for Blast Radius, Cmd+Shift+E to explain code.');
+
+  // Visible confirmation that the extension actually loaded in this window,
+  // with a one-click shortcut to the Detonate output channel for diagnostics.
+  void vscode.window
+    .showInformationMessage(
+      '🔥 Detonate is active. Click in a code file, put your cursor on a function name, then press Ctrl+Shift+D.',
+      'Show Logs'
+    )
+    .then((choice) => {
+      if (choice === 'Show Logs') logger.show();
+    });
 }
 
 export function deactivate(): void {

@@ -12,6 +12,10 @@ export interface BlastNode {
   depth: number;
   /** Nodes that reference this node */
   callers: BlastNode[];
+  /** AI one-liner describing what this symbol does (lazily fetched) */
+  explanation?: string;
+  /** Fetch state — guards against duplicate API calls for the same node */
+  explanationState?: 'pending' | 'done' | 'error';
 }
 
 /** Full result of a blast radius analysis */

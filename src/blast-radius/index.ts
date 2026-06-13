@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { analyzeBlastRadius } from './analyzer';
 import { applyDecorations, clearDecorations, disposeDecorations } from './overlayDecorator';
 import { BlastRadiusSidebarPanel } from './sidebarPanel';
+import { explainNode } from './nodeExplainer';
 import { getBlastRadiusMaxDepth } from '../shared/config';
 import { logger } from '../shared/logger';
 
@@ -11,7 +12,9 @@ export class BlastRadiusProvider implements vscode.Disposable {
   private disposables: vscode.Disposable[] = [];
 
   constructor(context: vscode.ExtensionContext) {
-    this.sidebar = new BlastRadiusSidebarPanel();
+    // Pass the AI explainer so each affected node gets a "what does this do?"
+    // one-liner — turning the warning view into a learning view.
+    this.sidebar = new BlastRadiusSidebarPanel(explainNode);
     this.treeView = vscode.window.createTreeView('detonate.blastRadiusTree', {
       treeDataProvider: this.sidebar,
       showCollapseAll: true,
