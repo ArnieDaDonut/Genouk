@@ -3,11 +3,13 @@ const esbuild = require('esbuild');
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
-/** @type {import('esbuild').BuildOptions} */
 const buildOptions = {
-  entryPoints: ['src/extension.ts'],
+  entryPoints: {
+    extension: 'src/extension.ts',
+    blastRadiusApp: 'src/webviews/blast-radius-app/index.tsx',
+  },
   bundle: true,
-  outfile: 'dist/extension.js',
+  outdir: 'dist',
   external: ['vscode'],          // vscode is provided by the host, never bundle it
   format: 'cjs',
   platform: 'node',

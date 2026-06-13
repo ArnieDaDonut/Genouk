@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: var(--vscode-editor-background);
+  --fg-primary: var(--vscode-editor-foreground);
+  --accent: #f97316; /* Tailwind orange-500 */
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--fg-primary);
+  font-family: var(--vscode-font-family), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+.app-container {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.app-header {
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  padding-bottom: 16px;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+.section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.nodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Base tailwind-like utility classes used in the components */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.items-end { align-items: flex-end; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.mt-1 { margin-top: 4px; }
+.mt-6 { margin-top: 24px; }
+.mb-4 { margin-bottom: 16px; }
+.p-4 { padding: 16px; }
+.px-1 { padding-left: 4px; padding-right: 4px; }
+.h-screen { height: 100vh; }
+.w-full { width: 100%; }
+.h-10 { height: 40px; }
+.w-10 { width: 40px; }
+.rounded-lg { border-radius: 8px; }
+.rounded-full { border-radius: 9999px; }
+.rounded { border-radius: 4px; }
+.border { border-width: 1px; }
+
+/* Colors - mapped to lucide icons / generic webview use */
+.text-orange-500 { color: #f97316; }
+.text-orange-400 { color: #fb923c; }
+.border-orange-500\/50 { border-color: rgba(249, 115, 22, 0.5); }
+.bg-orange-500\/10 { background-color: rgba(249, 115, 22, 0.1); }
+
+.text-red-400 { color: #f87171; }
+.border-red-500\/40 { border-color: rgba(239, 68, 68, 0.4); }
+.bg-red-500\/10 { background-color: rgba(239, 68, 68, 0.1); }
+
+.text-yellow-400 { color: #facc15; }
+.border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+.bg-yellow-500\/10 { background-color: rgba(234, 179, 8, 0.1); }
+
+.text-blue-400 { color: #60a5fa; }
+.border-blue-500\/30 { border-color: rgba(59, 130, 246, 0.3); }
+.bg-blue-500\/10 { background-color: rgba(59, 130, 246, 0.1); }
+
+.bg-black\/20 { background-color: rgba(0, 0, 0, 0.2); }
+
+.font-mono { font-family: var(--vscode-editor-font-family, monospace); }
+.font-semibold { font-weight: 600; }
+.font-medium { font-weight: 500; }
+.text-\[15px\] { font-size: 15px; }
+.text-\[12px\] { font-size: 12px; }
+.text-\[11px\] { font-size: 11px; }
+.tracking-wide { letter-spacing: 0.025em; }
+.tracking-wider { letter-spacing: 0.05em; }
+.uppercase { text-transform: uppercase; }
+.opacity-80 { opacity: 0.8; }
+.opacity-50 { opacity: 0.5; }
+.opacity-70 { opacity: 0.7; }
+
+.cursor-pointer { cursor: pointer; }
+.transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
+.hover\:bg-opacity-20:hover { --tw-bg-opacity: 0.2; }
+.backdrop-blur-sm { backdrop-filter: blur(4px); }
+
+.empty-state {
+  padding: 40px;
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+  border: 1px dashed var(--vscode-panel-border);
+  border-radius: 8px;
+  margin-top: 24px;
+}
