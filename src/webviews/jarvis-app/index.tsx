@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 
 declare const window: any;
-const vscode = window.acquireVsCodeApi();
 
 const greetings = [
   "Hello! I am Genouk 👋",
@@ -271,6 +270,12 @@ const JarvisVisualizer: React.FC<VisualizerProps> = ({ vibe, score }) => {
 };
 
 const App = () => {
+  const vsCodeRef = useRef<any>(null);
+  if (!vsCodeRef.current) {
+    vsCodeRef.current = window.acquireVsCodeApi();
+  }
+  const vscode = vsCodeRef.current;
+
   // Tabs: 'prompts', 'session', 'changes', 'audio'
   const [activeTab, setActiveTab] = useState<'prompts' | 'session' | 'changes' | 'audio'>('prompts');
   
