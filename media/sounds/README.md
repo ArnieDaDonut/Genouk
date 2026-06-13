@@ -22,3 +22,4 @@ Place the following MP3 sound effect files in this directory:
 - Keep files short (10–30 seconds) — they loop or replay on state changes
 - Use `.mp3` format for cross-platform compatibility
 - Keep file sizes small (< 1MB each) for fast extension loading
+
