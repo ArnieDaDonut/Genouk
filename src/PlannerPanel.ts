@@ -19,7 +19,7 @@ export class PlannerPanel {
       PlannerPanel.current.panel.reveal(column);
       return;
     }
-
+    
     const panel = vscode.window.createWebviewPanel(
       'genouk.planner',
       'Genouk Planner',
