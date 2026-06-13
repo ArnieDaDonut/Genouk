@@ -70,6 +70,8 @@ const App = () => {
   // Codebase tour
   const [tour, setTour] = useState<CodebaseTour | null>(null);
   const [tourLoading, setTourLoading] = useState(false);
+  const tourRef = useRef<CodebaseTour | null>(null);
+  useEffect(() => { tourRef.current = tour; }, [tour]);
 
   // Live (narrated) tour playback
   const [tourPlaying, setTourPlaying] = useState(false);
@@ -193,6 +195,11 @@ const App = () => {
         case 'syncToLinearResult':
           setSyncingLinear(false);
           break;
+        case 'tourStepDelta':
+          if (typeof message.value === 'number') {
+            setTourStep((s) => Math.max(0, Math.min((tourRef.current?.stops.length ?? 0), s + message.value)));
+          }
+          break;
         case 'error':
           setError(message.value);
           setPromptLoading(false);
@@ -307,6 +314,7 @@ const App = () => {
   };
 
   const handleGenerateTour = (description: string) => {
+    stopLiveTour();
     setTourLoading(true);
     setError('');
     setTour(null);
@@ -314,6 +322,7 @@ const App = () => {
   };
 
   const handleResetTour = () => {
+    stopLiveTour();
     setTour(null);
   };
 
@@ -326,11 +335,13 @@ const App = () => {
     setActiveTab('tour');
     setTourStep(0);
     setTourPlaying(true);
+    vscode.postMessage({ type: 'setTourPlaying', value: true });
   };
 
   const stopLiveTour = () => {
     setTourPlaying(false);
     setActiveStop(null);
+    vscode.postMessage({ type: 'setTourPlaying', value: false });
   };
 
   // Drive the narrated tour: each step switches to the Tour tab, opens the stop's
@@ -343,6 +354,7 @@ const App = () => {
       speak("That's the whole tour — you're all caught up. 🎉");
       setTourPlaying(false);
       setActiveStop(null);
+      vscode.postMessage({ type: 'setTourPlaying', value: false });
       return;
     }
 
@@ -358,6 +370,36 @@ const App = () => {
     const id = window.setTimeout(() => setTourStep((s) => s + 1), ms);
     return () => clearTimeout(id);
   }, [tourPlaying, tourStep, tour]);
+
+  // Listen for Left / Right arrow keys to navigate stops manually.
+  useEffect(() => {
+    if (!tourPlaying || !tour || tour.stops.length === 0) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setTourStep((s) => Math.min(tour.stops.length, s + 1));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setTourStep((s) => Math.max(0, s - 1));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [tourPlaying, tour]);
+
+  useEffect(() => {
+    return () => {
+      vscode.postMessage({ type: 'setTourPlaying', value: false });
+    };
+  }, []);
   return (
     <div
       className="genouk-root"
@@ -428,6 +470,7 @@ const App = () => {
         walkSignal={walkSignal}
         tourPlaying={tourPlaying}
         onDoubleActivate={() => {
+          if (tourPlaying) return;
           setActiveTab('prompts');
           handleReviewPrompt();
         }}

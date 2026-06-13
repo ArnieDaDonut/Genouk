@@ -160,8 +160,24 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           await this.revealInFile(data.value?.file, data.value?.symbol);
           break;
         }
+        case 'setTourPlaying': {
+          await this.setTourPlaying(!!data.value);
+          break;
+        }
       }
     });
+  }
+
+  public nextTourStop() {
+    this._view?.webview.postMessage({ type: 'tourStepDelta', value: 1 });
+  }
+
+  public previousTourStop() {
+    this._view?.webview.postMessage({ type: 'tourStepDelta', value: -1 });
+  }
+
+  private async setTourPlaying(playing: boolean) {
+    await vscode.commands.executeCommand('setContext', 'genouk.liveTour', playing);
   }
 
   /** Open a workspace-relative file path in the editor (best-effort). */
@@ -415,4 +431,3 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       </html>`;
   }
 }
-

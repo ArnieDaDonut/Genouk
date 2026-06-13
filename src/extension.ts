@@ -14,6 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(store);
 
   const sidebarProvider = new GenoukSidebarProvider(context, store);
+  vscode.commands.executeCommand('setContext', 'genouk.liveTour', false);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       'genouk.sidebar',
@@ -21,6 +22,12 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('genouk.openPlanner', () => {
       PlannerPanel.createOrShow(context.extensionUri, store);
+    }),
+    vscode.commands.registerCommand('genouk.tourNext', () => {
+      sidebarProvider.nextTourStop();
+    }),
+    vscode.commands.registerCommand('genouk.tourPrevious', () => {
+      sidebarProvider.previousTourStop();
     }),
     vscode.commands.registerCommand('genouk.syncTodosToLinear', async () => {
       const editor = vscode.window.activeTextEditor;

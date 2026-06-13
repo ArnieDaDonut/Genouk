@@ -123,6 +123,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
 
   const phaseRef = useRef(phase);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  const greetedRef = useRef(false);
 
   const reactTimer = useRef<number>();
   const sleepTimer = useRef<number>();
@@ -156,7 +157,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
 
   // True only when Genouk is calm enough to wander off on a stroll.
   const canStrollRef = useRef(false);
-  useEffect(() => { canStrollRef.current = !reaction && !thinking && !asleep && phase === 'arrived'; }, [reaction, thinking, asleep, phase]);
+  useEffect(() => { canStrollRef.current = !reaction && !thinking && !asleep && phase === 'arrived' && !tourPlaying; }, [reaction, thinking, asleep, phase, tourPlaying]);
 
   // Any activity wakes the mascot and restarts the idle->sleep countdown.
   const markActivity = useCallback(() => {
@@ -294,10 +295,13 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
 
   // Greet once Genouk arrives.
   useEffect(() => {
+    if (tourPlaying) return;
+    if (greetedRef.current) return;
     if (phase !== 'arrived') return;
+    greetedRef.current = true;
     showManual(quip('greeting'), 6000);
     markActivity();
-  }, [phase, showManual, markActivity]);
+  }, [phase, showManual, markActivity, tourPlaying]);
 
   // --- Reaction triggers (derived from existing signals) ---
 
@@ -360,6 +364,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   // --- Interactions ---
 
   const handleClick = () => {
+    if (tourPlaying) return;
     if (phase !== 'arrived') return;
     const wasAsleep = asleep;
     markActivity();
@@ -368,11 +373,13 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   };
 
   const handleHover = () => {
+    if (tourPlaying) return;
     if (phase !== 'arrived' || reaction) return;
     react('perk', null);
   };
 
   const handleDoubleClick = () => {
+    if (tourPlaying) return;
     if (phase !== 'arrived') return;
     markActivity();
     onDoubleActivate?.();
@@ -414,6 +421,10 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   } else if (thinking) {
     arrivedAnimate = { opacity: 1, y: reduced ? 0 : [0, -3, 0] };
     arrivedTransition = { y: { duration: 0.7, repeat: Infinity, ease: 'easeInOut' }, opacity: { duration: t.motion.base } };
+  } else if (tourPlaying) {
+    // Keep him completely still during the tour (no strolling/moving, no floating/jittering)
+    arrivedAnimate = { opacity: 1, x: 0, y: 0, scaleX: 1 };
+    arrivedTransition = { opacity: { duration: t.motion.base } };
   } else if (strolling) {
     // Wander left, turn, wander right, return to center — walk sheet + facing flips.
     // (scaleX 1 faces left for this sheet; -1 faces right.)
@@ -446,13 +457,13 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onMouseEnter={handleHover}
-      title={phase === 'arrived' ? 'Click for a tip · double-click to review your prompt' : undefined}
+      title={phase === 'arrived' && !tourPlaying ? 'Click for a tip · double-click to review your prompt' : undefined}
       aria-hidden="true"
       style={{
         width: displayWidth,
         height: displayHeight,
         flexShrink: 0,
-        cursor: phase === 'arrived' ? 'pointer' : 'default',
+        cursor: phase === 'arrived' && !tourPlaying ? 'pointer' : 'default',
         userSelect: 'none',
         backgroundImage: spriteUrl ? `url('${spriteUrl}')` : 'none',
         backgroundRepeat: 'no-repeat',

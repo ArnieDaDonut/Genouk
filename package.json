@@ -33,6 +33,30 @@
         "command": "genouk.syncTodosToLinear",
         "title": "Genouk: Sync TODOs in Active File to Linear",
         "icon": "$(sync)"
+      },
+      {
+        "command": "genouk.tourNext",
+        "title": "Genouk: Live Tour Next Stop",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "genouk.tourPrevious",
+        "title": "Genouk: Live Tour Previous Stop",
+        "icon": "$(arrow-left)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "genouk.tourNext",
+        "key": "right",
+        "mac": "right",
+        "when": "editorTextFocus && genouk.liveTour"
+      },
+      {
+        "command": "genouk.tourPrevious",
+        "key": "left",
+        "mac": "left",
+        "when": "editorTextFocus && genouk.liveTour"
       }
     ],
     "viewsContainers": {
