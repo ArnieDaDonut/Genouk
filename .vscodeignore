@@ -1,0 +1,9 @@
+dist
+node_modules
+.vscode-test
+**/*.map
+src
+test
+esbuild.config.js
+tsconfig.json
+.eslintrc.json
