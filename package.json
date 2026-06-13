@@ -1,130 +1,55 @@
 {
-  "name": "detonate",
-  "displayName": "Detonate",
-  "description": "Blast Radius visualization, AI code explanations, and vibe-matched music for your dev workflow.",
+  "name": "jarvis",
+  "displayName": "Jarvis",
+  "description": "Jarvis AI Assistant for prompt engineering and review",
   "version": "0.0.1",
-  "publisher": "detonate-dev",
+  "publisher": "jarvis-dev",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "Other",
     "Programming Languages",
-    "Visualization"
+    "Machine Learning"
   ],
   "keywords": [
-    "blast radius",
-    "dependency graph",
-    "code explanation",
+    "jarvis",
     "AI",
-    "music",
-    "vibe"
+    "prompt",
+    "review"
   ],
   "activationEvents": [
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "detonate.blastRadius",
-        "title": "Detonate: Show Blast Radius",
-        "icon": "$(flame)"
-      },
-      {
-        "command": "detonate.explainCode",
-        "title": "Detonate: Explain This Code",
-        "icon": "$(lightbulb)"
-      },
-      {
-        "command": "detonate.toggleVibe",
-        "title": "Detonate: Toggle Vibe Score",
-        "icon": "$(music)"
-      },
-      {
-        "command": "detonate.connectSpotify",
-        "title": "Detonate: Connect Spotify"
-      },
-      {
-        "command": "detonate.clearBlastRadius",
-        "title": "Detonate: Clear Blast Radius Highlights"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "detonate.blastRadius",
-        "key": "ctrl+shift+d",
-        "mac": "cmd+shift+d",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "detonate.explainCode",
-        "key": "ctrl+shift+e",
-        "mac": "cmd+shift+e",
-        "when": "editorTextFocus"
-      }
-    ],
-    "views": {
-      "explorer": [
+    "viewsContainers": {
+      "activitybar": [
         {
-          "id": "detonate.blastRadiusTree",
-          "name": "Blast Radius",
-          "icon": "$(flame)",
-          "contextualTitle": "Blast Radius Impact"
+          "id": "jarvis-sidebar",
+          "title": "Jarvis",
+          "icon": "$(robot)"
         }
       ]
     },
-    "menus": {
-      "editor/context": [
+    "views": {
+      "jarvis-sidebar": [
         {
-          "command": "detonate.blastRadius",
-          "group": "detonate@1",
-          "when": "editorTextFocus"
-        },
-        {
-          "command": "detonate.explainCode",
-          "group": "detonate@2",
-          "when": "editorTextFocus && editorHasSelection"
+          "type": "webview",
+          "id": "jarvis.sidebar",
+          "name": "Jarvis Assistant",
+          "icon": "$(robot)"
         }
       ]
     },
     "configuration": {
-      "title": "Detonate",
+      "title": "Jarvis",
       "properties": {
-        "detonate.geminiApiKey": {
+        "jarvis.geminiApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Gemini API key for AI-powered code explanations.",
+          "description": "Your Gemini API key for Jarvis AI.",
           "markdownDescription": "Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey)"
-        },
-        "detonate.vibeSound": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable sound effects that match your code health score."
-        },
-        "detonate.vibeVolume": {
-          "type": "number",
-          "default": 50,
-          "minimum": 0,
-          "maximum": 100,
-          "description": "Volume for vibe sound effects (0-100)."
-        },
-        "detonate.spotifyClientId": {
-          "type": "string",
-          "default": "",
-          "description": "Spotify App Client ID for Spotify integration."
-        },
-        "detonate.blastRadiusMaxDepth": {
-          "type": "number",
-          "default": 3,
-          "minimum": 1,
-          "maximum": 10,
-          "description": "Maximum call depth to traverse in Blast Radius analysis."
-        },
-        "detonate.autoBlastRadius": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically show Blast Radius when cursor rests on a symbol."
         }
       }
     }

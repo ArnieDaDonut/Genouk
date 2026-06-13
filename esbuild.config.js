@@ -6,7 +6,7 @@ const watch = process.argv.includes('--watch');
 const buildOptions = {
   entryPoints: {
     extension: 'src/extension.ts',
-    blastRadiusApp: 'src/webviews/blast-radius-app/index.tsx',
+    jarvisApp: 'src/webviews/jarvis-app/index.tsx',
   },
   bundle: true,
   outdir: 'dist',
