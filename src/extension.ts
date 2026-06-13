@@ -13,7 +13,10 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       'jarvis.sidebar',
-      sidebarProvider
+      sidebarProvider,
+      // Keep the webview (and its unlocked AudioContext) alive when hidden, so
+      // event sounds still play when you've switched to another sidebar view.
+      { webviewOptions: { retainContextWhenHidden: true } }
     ),
     vscode.commands.registerCommand('genouk.openPlanner', () => {
       PlannerPanel.createOrShow(context.extensionUri, store);

@@ -42,6 +42,22 @@ export interface CodebaseTour {
   stops: TourStop[];
 }
 
+export interface Personalization {
+  /** Accessory id from accessories.ts (e.g. 'tophat'). */
+  accessory: string;
+  /** Selected SFX (SfxName from musicEngine) per event slot. */
+  sfx: {
+    goodCompile: string;
+    badCompile: string;
+    notification: string;
+  };
+}
+
+export const DEFAULT_PERSONALIZATION: Personalization = {
+  accessory: 'none',
+  sfx: { goodCompile: 'chime', badCompile: 'buzz', notification: 'ping' },
+};
+
 export interface VibeState {
   score: number | null;
   vibe: string;

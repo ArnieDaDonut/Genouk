@@ -20,6 +20,9 @@ let reverb: Tone.Reverb | null = null;
 let leadSynth: Tone.PolySynth | null = null;
 let bellSynth: Tone.Synth | null = null;
 let bassSynth: Tone.Synth | null = null;
+// Dedicated, loud, mid-range synth for one-shot SFX so they're clearly audible on
+// laptop speakers (deep bass tones get rolled off and sound like "nothing played").
+let sfxSynth: Tone.PolySynth | null = null;
 
 /**
  * Web Audio refuses to start until a user gesture. Call this from inside a click
@@ -49,6 +52,17 @@ export async function ensureAudio(): Promise<void> {
     envelope: { attack: 0.02, decay: 0.25, sustain: 0.3, release: 0.5 },
   }).connect(reverb);
   bassSynth.volume.value = -14;
+
+  sfxSynth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.004, decay: 0.14, sustain: 0.08, release: 0.18 },
+  }).toDestination(); // dry + loud so SFX cut through
+  sfxSynth.volume.value = -3;
+}
+
+/** Whether Web Audio has been unlocked (a user gesture happened). */
+export function isAudioStarted(): boolean {
+  return audioStarted;
 }
 
 /** Master volume in 0..1 (linear), with mute. Mirrors the webview's volume slider. */
@@ -90,6 +104,70 @@ export function playTier(tier: MusicTier): MusicCue {
   PHRASES[tier](now);
   return { tier, label: TIER_LABEL[tier] };
 }
+
+/* ------------------------------------------------------------------ *
+ * Selectable sound effects (Personalization tab).
+ *
+ * Short synthesized one-shots the user can assign to events: a good compile,
+ * a bad compile, and an "agent needs attention" notification. Like the music
+ * phrases these are generated live, so the user gets a menu of distinct sounds
+ * without us shipping a single audio file.
+ * ------------------------------------------------------------------ */
+
+export type SfxName =
+  | 'chime' | 'fanfare' | 'powerUp' | 'coin'
+  | 'buzz' | 'descend' | 'thud' | 'glitch'
+  | 'ping' | 'pop' | 'knock';
+
+export interface SfxOption { name: SfxName; label: string; }
+
+/** Curated menus per slot (any sound is allowed, but these read sensibly). */
+export const SFX_MENU: { good: SfxOption[]; bad: SfxOption[]; notification: SfxOption[] } = {
+  good: [
+    { name: 'chime', label: 'Chime' },
+    { name: 'fanfare', label: 'Fanfare' },
+    { name: 'powerUp', label: 'Power-up' },
+    { name: 'coin', label: 'Coin' },
+  ],
+  bad: [
+    { name: 'buzz', label: 'Buzzer' },
+    { name: 'descend', label: 'Sad trombone' },
+    { name: 'thud', label: 'Thud' },
+    { name: 'glitch', label: 'Glitch' },
+  ],
+  notification: [
+    { name: 'ping', label: 'Ping' },
+    { name: 'pop', label: 'Pop' },
+    { name: 'knock', label: 'Knock' },
+    { name: 'chime', label: 'Chime' },
+  ],
+};
+
+/** Play a one-shot SFX by name. No-op until audio has been unlocked. */
+export function playSfx(name: SfxName): void {
+  if (!audioStarted || !sfxSynth) return;
+  const t = Tone.now() + 0.02;
+  (SFX[name] ?? SFX.ping)(t);
+}
+
+// All SFX use the loud, dry, mid-range sfxSynth so they're clearly audible. Notes
+// stay in octaves 4-6 (~260 Hz+) which laptop speakers reproduce well.
+const beep = (notes: string[], start: number, step: number, dur = '0.12', vel = 0.9) =>
+  notes.forEach((n, i) => sfxSynth!.triggerAttackRelease(n, dur, start + i * step, vel));
+
+const SFX: Record<SfxName, (t: number) => void> = {
+  chime: (t) => beep(['C5', 'E5', 'G5'], t, 0.1, '0.16'),
+  fanfare: (t) => { sfxSynth!.triggerAttackRelease(['C5', 'E5', 'G5'], '0.35', t, 0.9); beep(['C6'], t + 0.14, 0, '0.3'); },
+  powerUp: (t) => beep(['C5', 'E5', 'G5', 'C6'], t, 0.06, '0.1'),
+  coin: (t) => { beep(['B5'], t, 0, '0.08'); beep(['E6'], t + 0.08, 0, '0.28'); },
+  buzz: (t) => { sfxSynth!.triggerAttackRelease(['A4', 'Bb4'], '0.18', t, 0.9); sfxSynth!.triggerAttackRelease(['A4', 'Bb4'], '0.18', t + 0.22, 0.9); },
+  descend: (t) => beep(['G4', 'F4', 'Eb4', 'D4'], t, 0.14, '0.18'),
+  thud: (t) => { sfxSynth!.triggerAttackRelease('C3', '0.22', t, 1.0); sfxSynth!.triggerAttackRelease('G3', '0.18', t + 0.02, 0.7); },
+  glitch: (t) => beep(['C5', 'Gb5', 'C5', 'A5'], t, 0.05, '0.06'),
+  ping: (t) => beep(['G5', 'C6'], t, 0.1, '0.16'),
+  pop: (t) => beep(['C6'], t, 0, '0.09'),
+  knock: (t) => beep(['C4', 'C4'], t, 0.14, '0.08'),
+};
 
 type Phrase = (t: number) => void;
 

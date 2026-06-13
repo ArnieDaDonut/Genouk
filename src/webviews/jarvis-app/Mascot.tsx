@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useAnimationControls } from 
 import { t } from './theme';
 import { PromptReviewResult, SessionPlan, VibeState } from './types';
 import { quip, bankForScore, QuipBank } from './quips';
+import { findAccessory } from './accessories';
 
 declare const window: any;
 
@@ -25,6 +26,8 @@ interface MascotProps {
   say?: MascotMessage | null;
   /** Bump to make Genouk walk/stroll across the panel (live-tour steps). */
   walkSignal?: number;
+  /** Accessory id (accessories.ts) worn over the sprite. */
+  accessory?: string;
   /** Double-click shortcut into the prompt review. */
   onDoubleActivate?: () => void;
 }
@@ -81,7 +84,7 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
   perk: { animate: { scale: [1, 1.04, 1] }, duration: 0.5 },
 };
 
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, accessory, onDoubleActivate }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
@@ -425,6 +428,8 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     };
   }
 
+  const worn = findAccessory(accessory ?? 'none');
+
   const sprite = (
     <div
       onClick={handleClick}
@@ -433,6 +438,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
       title={phase === 'arrived' ? 'Click for a tip · double-click to review your prompt' : undefined}
       aria-hidden="true"
       style={{
+        position: 'relative',
         width: displayWidth,
         height: displayHeight,
         flexShrink: 0,
@@ -448,7 +454,26 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
         // Mirror the walk sprite so it faces the way it's moving.
         transform: phase === 'walking' ? `scaleX(${facingFlip})` : undefined,
       }}
-    />
+    >
+      {worn.emoji && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: worn.top,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            fontSize: worn.size,
+            lineHeight: 1,
+            pointerEvents: 'none',
+            // Counter-mirror so the accessory stays upright while walking.
+            ...(phase === 'walking' ? { transform: `translateX(-50%) scaleX(${facingFlip})` } : {}),
+          }}
+        >
+          {worn.emoji}
+        </span>
+      )}
+    </div>
   );
 
   return (

@@ -51,6 +51,22 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
         this._view?.webview.postMessage({ type: 'sessionPlan', value: plan });
       })
     );
+
+    // Most people build from the integrated terminal, not VS Code "tasks", so the
+    // task event above never fires for them. Shell-integration (VS Code ≥ 1.93)
+    // tells us when a terminal command finishes and its exit code — the reliable
+    // signal for "good/bad compile". Guarded so older VS Code still loads.
+    const onShellEnd = (vscode.window as any).onDidEndTerminalShellExecution;
+    if (typeof onShellEnd === 'function') {
+      this._context.subscriptions.push(
+        onShellEnd((e: any) => this.handleShellEnd(e)),
+      );
+    }
+
+    // The Run/Debug (F5) button doesn't use the terminal — catch it separately.
+    this._context.subscriptions.push(
+      vscode.debug.onDidTerminateDebugSession(() => this.handleDebugEnd()),
+    );
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -132,6 +148,18 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
         }
         case 'revealInFile': {
           await this.revealInFile(data.value?.file, data.value?.symbol);
+          break;
+        }
+        case 'getPersonalization': {
+          webviewView.webview.postMessage({ type: 'personalization', value: this._context.globalState.get('personalization') ?? null });
+          break;
+        }
+        case 'savePersonalization': {
+          await this._context.globalState.update('personalization', data.value);
+          break;
+        }
+        case 'log': {
+          log(`[webview] ${data.value}`);
           break;
         }
       }
@@ -317,13 +345,44 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   private handleTaskEnd(e: vscode.TaskProcessEndEvent) {
     if (!this._view) return;
     const taskName = e.execution.task.name.toLowerCase();
-    if (taskName.includes('build') || taskName.includes('compile') || taskName.includes('watch') || taskName.includes('bundle')) {
-      if (e.exitCode === 0) {
-        this._view.webview.postMessage({ type: 'playSFX', value: 'compile-success' });
-      } else {
-        this._view.webview.postMessage({ type: 'playSFX', value: 'compile-error' });
-      }
+    const isBuild = taskName.includes('build') || taskName.includes('compile') || taskName.includes('watch') || taskName.includes('bundle');
+    if (isBuild) {
+      this._view.webview.postMessage({ type: 'playSFX', value: e.exitCode === 0 ? 'compile-success' : 'compile-error' });
+    } else {
+      // Any other task finishing is an "agent needs attention" moment.
+      this._view.webview.postMessage({ type: 'playSFX', value: 'notification' });
     }
+  }
+
+  // Commands worth a sound: building OR running code. Trivial shell noise
+  // (cd/ls/git/echo…) deliberately doesn't match.
+  private static readonly RUN_CMD_RE =
+    /\b(tsc|build|compile|bundle|webpack|vite|esbuild|rollup|make|cmake|mvn|gradle)\b/i;
+  private static readonly RUN_PROG_RE =
+    /\b(node|nodemon|ts-node|tsx|deno|bun|python3?|py|ruby|rails|java|dotnet|cargo|go|php|pytest|jest|vitest|mocha)\b|npm\s+(run\s+\S+|start|test|build)|yarn\s+\S+|pnpm\s+\S+/i;
+
+  /** Terminal command finished (shell integration) — sound build/run successes/failures. */
+  private handleShellEnd(e: any) {
+    if (!this._view) return;
+    const cmd: string = e?.execution?.commandLine?.value ?? '';
+    if (!cmd) return;
+    log(`Shell command finished (exit ${e.exitCode}): ${cmd}`);
+    const relevant = JarvisSidebarProvider.RUN_CMD_RE.test(cmd) || JarvisSidebarProvider.RUN_PROG_RE.test(cmd);
+    if (!relevant) return;
+    // exitCode can be undefined if the shell couldn't report it; treat that as success.
+    const failed = typeof e.exitCode === 'number' && e.exitCode !== 0;
+    this._view.webview.postMessage({ type: 'playSFX', value: failed ? 'compile-error' : 'compile-success' });
+  }
+
+  /**
+   * The Run/Debug (F5) button launches a debug session, which never touches the
+   * terminal — so we listen for it ending. The debug API doesn't reliably expose
+   * an exit code, so this just plays the "good" cue to mark "your run finished".
+   */
+  private handleDebugEnd() {
+    if (!this._view) return;
+    log('Debug session ended.');
+    this._view.webview.postMessage({ type: 'playSFX', value: 'compile-success' });
   }
 
   private _getAudioUris(webview: vscode.Webview) {
@@ -387,4 +446,3 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
       </html>`;
   }
 }
-

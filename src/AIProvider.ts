@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { log } from './log';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
@@ -140,9 +141,12 @@ export class AIProvider {
         const text = await provider.generate(userContent, systemContent, opts);
         if (text.trim()) return text;
         failures.push(`${provider.name}: empty response`);
+        log(`${provider.name} returned an empty response.`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         failures.push(`${provider.name}: ${shorten(msg)}`);
+        // The banner shows a trimmed line; the output channel keeps the full text.
+        log(`${provider.name} FAILED (full error):\n${msg}`);
         console.warn(`[Genouk] ${provider.name} failed, trying next provider:`, err);
       }
     }
