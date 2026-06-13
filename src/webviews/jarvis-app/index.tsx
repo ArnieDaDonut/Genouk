@@ -5,6 +5,7 @@ import {
   Volume2, VolumeX, CheckSquare, Square, AlertCircle, 
   RefreshCw, Copy, Check, Play, Sliders 
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 declare const window: any;
 
@@ -18,6 +19,110 @@ const greetings = [
   "I love floating here in your editor! 🤖",
   "Type your code, and I'll keep you company! 🌟"
 ];
+
+interface ChromaVideoProps {
+  src: string;
+  onEnded: () => void;
+  onError: () => void;
+}
+
+const ChromaVideo: React.FC<ChromaVideoProps> = ({ src, onEnded, onError }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    let animationFrameId: number;
+    const renderWidth = 320;
+    const renderHeight = 180;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    const processFrame = () => {
+      if (video.paused || video.ended) return;
+
+      // Draw the video frame to the canvas
+      ctx.drawImage(video, 0, 0, renderWidth, renderHeight);
+
+      // Get pixel data
+      const frame = ctx.getImageData(0, 0, renderWidth, renderHeight);
+      const l = frame.data.length;
+
+      // Replace pixels close to RGB (42, 42, 42) with transparency
+      for (let i = 0; i < l; i += 4) {
+        const r = frame.data[i];
+        const g = frame.data[i + 1];
+        const b = frame.data[i + 2];
+
+        // Background filter: check if in range [36, 47] and is neutral grey (R=G=B)
+        if (r >= 36 && r <= 47 && g >= 36 && g <= 47 && b >= 36 && b <= 47 &&
+            Math.abs(r - g) <= 2 && Math.abs(g - b) <= 2) {
+          frame.data[i + 3] = 0; // Set alpha to 0 (transparent)
+        }
+      }
+
+      // Put the processed image back
+      ctx.putImageData(frame, 0, 0);
+
+      // Request next frame
+      animationFrameId = requestAnimationFrame(processFrame);
+    };
+
+    const handlePlay = () => {
+      animationFrameId = requestAnimationFrame(processFrame);
+    };
+
+    const handleEnded = () => {
+      cancelAnimationFrame(animationFrameId);
+      onEnded();
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('ended', handleEnded);
+
+    video.play().catch(err => {
+      console.error("Autoplay failed:", err);
+      onError();
+    });
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('ended', handleEnded);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [src, onEnded, onError]);
+
+  return (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Hidden Video Element */}
+      <video
+        ref={videoRef}
+        src={src}
+        muted
+        playsInline
+        style={{ display: 'none' }}
+      />
+      {/* Visible Canvas Element */}
+      <canvas
+        ref={canvasRef}
+        width={320}
+        height={180}
+        style={{
+          width: '100%',
+          height: 'auto',
+          maxHeight: '100%',
+          objectFit: 'contain',
+          background: 'transparent',
+        }}
+      />
+    </div>
+  );
+};
+
 
 interface SessionTask {
   id: string;
