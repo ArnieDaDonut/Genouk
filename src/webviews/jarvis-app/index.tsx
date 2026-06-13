@@ -10,7 +10,17 @@ import { ChangesTab } from './ChangesTab';
 import { SessionTab } from './SessionTab';
 import { AudioTab } from './AudioTab';
 import { EditorHealth } from './EditorHealth';
-import { Mascot } from './Mascot';
+import { Mascot, MascotMessage } from './Mascot';
+import { FocusTimerCard } from './FocusTimerCard';
+import { useFocusTimer, FocusPhase } from './useFocusTimer';
+
+const BREAK_NUDGES = [
+  'Break time! Stand up and stretch. 🧘',
+  "You've earned a breather — hydrate. 💧",
+  'Rest your eyes: look 20ft away for 20 seconds. 👀',
+  'Step away for a moment, the code will wait. ☕',
+  'Roll your shoulders and breathe. Back in a bit. 🌿',
+];
 
 declare const window: any;
 
@@ -53,6 +63,47 @@ const App = () => {
   // Session
   const [sessionPlan, setSessionPlan] = useState<SessionPlan | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Mascot speech (focus-timer reminders + task nudges)
+  const [mascotSay, setMascotSay] = useState<MascotMessage | null>(null);
+  const sayNonce = useRef(0);
+  const sessionPlanRef = useRef<SessionPlan | null>(null);
+  useEffect(() => { sessionPlanRef.current = sessionPlan; }, [sessionPlan]);
+
+  const speak = (text: string) => {
+    sayNonce.current += 1;
+    setMascotSay({ text, nonce: sayNonce.current });
+  };
+
+  /** First in-progress task, else first todo, else null. */
+  const nextTaskTitle = (): string | null => {
+    const plan = sessionPlanRef.current;
+    if (!plan) return null;
+    const inProgress = plan.tasks.find((x) => x.status === 'in_progress');
+    if (inProgress) return inProgress.title;
+    const todo = plan.tasks.find((x) => x.status === 'todo');
+    return todo ? todo.title : null;
+  };
+
+  const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
+    if (next === 'break') {
+      speak(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+    } else {
+      const task = nextTaskTitle();
+      speak(task ? `Break's over. Next up: ${task}` : "Break's over — let's get back to it. 🚀");
+    }
+  };
+
+  const timer = useFocusTimer(handlePhaseEnd);
+
+  /** Start the timer and have Genouk announce the current focus task. */
+  const startFocus = () => {
+    timer.start();
+    if (timer.phase === 'focus') {
+      const task = nextTaskTitle();
+      speak(task ? `Focus time. Work on: ${task}` : "Focus time — let's go. 💪");
+    }
+  };
 
   // Audio + diagnostics
   const [audioUris, setAudioUris] = useState<Record<string, string>>({});
@@ -325,7 +376,10 @@ const App = () => {
           <PromptTab prompt={prompt} setPrompt={setPrompt} review={review} setReview={setReview} loading={promptLoading} onReview={handleReviewPrompt} />
         )}
         {activeTab === 'session' && (
-          <SessionTab plan={sessionPlan} loading={sessionLoading} onGenerate={handleGenerateSession} onSave={handleSaveSession} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
+            <FocusTimerCard timer={timer} onStart={startFocus} />
+            <SessionTab plan={sessionPlan} loading={sessionLoading} onGenerate={handleGenerateSession} onSave={handleSaveSession} />
+          </div>
         )}
         {activeTab === 'changes' && (
           <ChangesTab changeReview={changeReview} loading={changeLoading} onReview={handleReviewChanges} />
@@ -335,7 +389,7 @@ const App = () => {
         )}
       </motion.div>
 
-      <Mascot />
+      <Mascot say={mascotSay} />
     </div>
   );
 };

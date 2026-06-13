@@ -76,12 +76,23 @@ const ChromaVideo: React.FC<ChromaVideoProps> = ({ src, onEnded, onError }) => {
   );
 };
 
+export interface MascotMessage {
+  text: string;
+  /** Bump on every send so identical text re-triggers the bubble. */
+  nonce: number;
+}
+
+interface MascotProps {
+  /** Push a message to make Genouk pop up and speak (break reminders, task nudges). */
+  say?: MascotMessage | null;
+}
+
 /**
  * The Genouk mascot. Personality lives here (idle float + click-to-talk speech
- * bubbles). Decorative chrome that communicated nothing (the holographic floor
- * ring) has been removed; only the idle float remains.
+ * bubbles). It also speaks on command via the `say` prop, which the App uses to
+ * deliver focus-timer break reminders and "what to work on" nudges.
  */
-export const Mascot: React.FC = () => {
+export const Mascot: React.FC<MascotProps> = ({ say }) => {
   const videoUrl = window.PET_VIDEO || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
 
@@ -90,6 +101,19 @@ export const Mascot: React.FC = () => {
   const [videoActive, setVideoActive] = useState(!!videoUrl);
   const [showRobot, setShowRobot] = useState(!videoUrl);
   const [currentFrame, setCurrentFrame] = useState(0);
+
+  // External messages (focus-timer reminders, task nudges). Forces the robot
+  // visible — cutting the one-time intro video short if it is somehow still up —
+  // and holds the bubble a little longer than a casual click greeting.
+  useEffect(() => {
+    if (!say || !say.text) return;
+    setVideoActive(false);
+    setShowRobot(true);
+    setGreetingText(say.text);
+    setGreetingVisible(true);
+    const timer = setTimeout(() => setGreetingVisible(false), 9000);
+    return () => clearTimeout(timer);
+  }, [say?.nonce]);
 
   // Sprite sheet geometry
   const frameWidth = 128;
