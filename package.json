@@ -160,9 +160,6 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.1",
-    "@google/genai": "^2.8.0",
-    "@google/generative-ai": "^0.14.0",
     "@linear/sdk": "^86.0.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
