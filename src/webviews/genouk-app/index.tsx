@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Square, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
@@ -431,6 +431,30 @@ const App = () => {
           handleReviewPrompt();
         }}
       />
+
+      {tourPlaying && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: t.space.md }}>
+          <button
+            onClick={stopLiveTour}
+            style={{
+              background: t.color.errorBg,
+              color: t.color.bad,
+              border: `1px solid ${t.color.errorBorder}`,
+              borderRadius: t.radius.sm,
+              padding: '6px 14px',
+              fontSize: t.font.size.xs,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontFamily: t.font.ui,
+              fontWeight: t.font.weight.semibold,
+            }}
+          >
+            <Square size={10} fill="currentColor" /> Stop Live Tour
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${t.color.border}`, marginBottom: t.space.md }}>
