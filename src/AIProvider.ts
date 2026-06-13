@@ -132,21 +132,31 @@ export class AIProvider {
       );
     }
 
-    let lastError: unknown;
+    // Collect every provider's failure so the surfaced error explains the whole
+    // fallback chain, not just the last hop (e.g. "Groq failed AND Gemini failed").
+    const failures: string[] = [];
     for (const provider of providers) {
       try {
         const text = await provider.generate(userContent, systemContent, opts);
         if (text.trim()) return text;
-        lastError = new Error(`${provider.name} returned an empty response.`);
+        failures.push(`${provider.name}: empty response`);
       } catch (err) {
-        lastError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        failures.push(`${provider.name}: ${shorten(msg)}`);
         console.warn(`[Genouk] ${provider.name} failed, trying next provider:`, err);
       }
     }
 
-    const detail = lastError instanceof Error ? lastError.message : String(lastError);
-    throw new Error(`All AI providers failed. Last error: ${detail}`);
+    throw new Error(`All AI providers failed.\n${failures.map((f) => `• ${f}`).join('\n')}`);
   }
+}
+
+/** Trim a long provider error to its first meaningful line for the UI. */
+function shorten(msg: string): string {
+  // Pull the human-readable "message" out of a JSON error body if present.
+  const m = /"message"\s*:\s*"([^"]+)"/.exec(msg);
+  const text = m ? m[1] : msg;
+  return text.length > 200 ? text.slice(0, 200) + '…' : text;
 }
 
 /**

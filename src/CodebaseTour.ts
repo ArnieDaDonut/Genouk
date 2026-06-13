@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AIProvider } from './AIProvider';
 import { gatherRepoContext } from './RepoContext';
+import { log } from './log';
 
 export interface TourStop {
   /** Feature/area name, e.g. "Prompt review pipeline". */
@@ -45,8 +46,13 @@ const SOURCE_EXT = new Set([
 // Files whose names suggest they are entry points or central wiring — read first.
 const ENTRY_HINTS = ['extension', 'main', 'index', 'app', 'server', 'cli', 'activate', 'bootstrap'];
 
-const MAX_FILES = 14;
-const PER_FILE_CHARS = 1600;
+// Scratch / generated / test files carry little architectural signal — skip them.
+const JUNK_RE = /(^|[\\/])(scratch[_-]|fix[_-]|tmp[_-]|temp[_-])|\.(test|spec)\.|\.d\.ts$/i;
+
+// Kept deliberately modest: the tour is the heaviest single call in the app, and
+// a big context + large output blows past free-tier per-minute token caps (429).
+const MAX_FILES = 10;
+const PER_FILE_CHARS = 1100;
 
 interface RankedFile {
   rel: string;
@@ -74,13 +80,16 @@ function rankSourceFiles(root: string): RankedFile[] {
         if (IGNORED_DIRS.has(entry.name)) continue;
         walk(abs, depth + 1);
       } else if (SOURCE_EXT.has(path.extname(entry.name).toLowerCase())) {
+        const rel = path.relative(root, abs);
+        if (JUNK_RE.test(rel)) continue; // skip scratch/generated/test files
         let size = 0;
         try { size = fs.statSync(abs).size; } catch { /* ignore */ }
         const base = entry.name.toLowerCase();
         let score = Math.min(size / 1000, 30); // bigger files tend to carry more logic, capped
         if (ENTRY_HINTS.some((h) => base.includes(h))) score += 40;
+        if (/(^|[\\/])src[\\/]/.test(rel)) score += 8; // real source tree
         if (depth <= 1) score += 10; // top-level files matter more
-        out.push({ rel: path.relative(root, abs), abs, size, score });
+        out.push({ rel, abs, size, score });
       }
     }
   };
@@ -92,20 +101,52 @@ function rankSourceFiles(root: string): RankedFile[] {
 /** Build the deep context block: repo summary + contents of the top-ranked files. */
 async function gatherTourContext(root: string): Promise<string> {
   const repo = await gatherRepoContext({ charBudget: 4000 });
-  const ranked = rankSourceFiles(root).slice(0, MAX_FILES);
+  const allRanked = rankSourceFiles(root);
+  const ranked = allRanked.slice(0, MAX_FILES);
 
   const fileBlocks: string[] = [];
+  const included: string[] = [];
   for (const f of ranked) {
     try {
       const raw = fs.readFileSync(f.abs, 'utf8');
       const body = raw.length > PER_FILE_CHARS ? raw.slice(0, PER_FILE_CHARS) + '\n…[truncated]' : raw;
       fileBlocks.push(`=== ${f.rel} ===\n${body}`);
+      included.push(f.rel);
     } catch {
       /* ignore unreadable file */
     }
   }
 
-  return `REPOSITORY OVERVIEW:\n${repo}\n\nKEY SOURCE FILES (truncated):\n\n${fileBlocks.join('\n\n')}`;
+  const context = `REPOSITORY OVERVIEW:\n${repo}\n\nKEY SOURCE FILES (truncated):\n\n${fileBlocks.join('\n\n')}`;
+  log(`Tour: found ${allRanked.length} source files; sending ${included.length} to the model (${Math.round(context.length / 1000)}k chars).`);
+  log(`Tour: files = ${included.join(', ')}`);
+  return context;
+}
+
+/**
+ * Pull the first balanced JSON object out of a string. The model sometimes wraps
+ * the object in prose or trails extra tokens; this recovers the object even then.
+ */
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 const SYSTEM_PROMPT = `You are a senior engineer giving a newcomer a guided tour of an unfamiliar codebase. You are given repository context and the contents of the most important source files.
@@ -146,20 +187,33 @@ export class CodebaseTourGenerator {
 
     const userContent = `${intent}\n\n${context}`;
     const ai = AIProvider.getInstance();
-    const resultText = await ai.generateContent(userContent, SYSTEM_PROMPT, { maxTokens: 6000 });
+    const resultText = await ai.generateContent(userContent, SYSTEM_PROMPT, { maxTokens: 4096 });
+    log(`Tour: model returned ${resultText.length} chars.`);
 
+    const cleaned = resultText.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const jsonText = extractJsonObject(cleaned) ?? cleaned;
+
+    let parsed: CodebaseTour;
     try {
-      const cleaned = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned) as CodebaseTour;
-      if (!Array.isArray(parsed.stops)) parsed.stops = [];
-      if (!Array.isArray(parsed.techStack)) parsed.techStack = [];
-      for (const stop of parsed.stops) {
-        if (!Array.isArray(stop.relatedFiles)) stop.relatedFiles = [];
-        if (typeof stop.symbol !== 'string') stop.symbol = '';
-      }
-      return parsed;
-    } catch {
-      throw new Error('Failed to parse the codebase tour from the AI response.');
+      parsed = JSON.parse(jsonText) as CodebaseTour;
+    } catch (e) {
+      log(`Tour: JSON parse FAILED. Raw response head:\n${resultText.slice(0, 600)}`);
+      throw new Error('Failed to parse the codebase tour from the AI response. See the "Genouk" output channel.');
     }
+
+    if (!Array.isArray(parsed.stops)) parsed.stops = [];
+    if (!Array.isArray(parsed.techStack)) parsed.techStack = [];
+    for (const stop of parsed.stops) {
+      if (!Array.isArray(stop.relatedFiles)) stop.relatedFiles = [];
+      if (typeof stop.symbol !== 'string') stop.symbol = '';
+    }
+
+    const files = new Set(parsed.stops.map((s) => s.file));
+    log(`Tour: parsed ${parsed.stops.length} stops across ${files.size} distinct files. inferred=${parsed.inferred}`);
+    if (parsed.stops.length <= 1) {
+      log('Tour: WARNING — model returned ≤1 stop. The prompt/model may be under-producing; consider regenerating.');
+    }
+
+    return parsed;
   }
 }

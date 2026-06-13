@@ -5,6 +5,7 @@ import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
 import { getNonce } from './webviewHtml';
+import { log } from './log';
 
 export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
@@ -171,36 +172,55 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
     }
 
     let range: vscode.Range | undefined;
-    if (symbol && symbol.trim()) {
-      range = await this.findSymbolRange(doc.uri, symbol.trim()) ?? this.findTextRange(doc, symbol.trim());
+    let how = 'none';
+    const sym = symbol?.trim();
+    if (sym) {
+      const viaSymbols = await this.findSymbolRange(doc.uri, sym);
+      if (viaSymbols) { range = viaSymbols; how = 'symbol-provider'; }
+      else {
+        const viaText = this.findTextRange(doc, sym);
+        if (viaText) { range = viaText; how = 'text-search'; }
+      }
     }
 
     if (range) {
+      const line = range.start.line;
+      const lineRange = new vscode.Range(line, 0, range.end.line, doc.lineAt(range.end.line).text.length);
       editor.selection = new vscode.Selection(range.start, range.end);
-      editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
-      editor.setDecorations(this.tourHighlight, [range]);
+      editor.revealRange(lineRange, vscode.TextEditorRevealType.InCenter);
+      editor.setDecorations(this.tourHighlight, [lineRange]);
       if (this.highlightClearTimer) clearTimeout(this.highlightClearTimer);
-      this.highlightClearTimer = setTimeout(() => {
-        editor.setDecorations(this.tourHighlight, []);
-      }, 6000);
+      this.highlightClearTimer = setTimeout(() => editor.setDecorations(this.tourHighlight, []), 7000);
+      log(`Reveal: ${relPath} → "${sym}" via ${how} at line ${line + 1}.`);
     } else {
       editor.revealRange(new vscode.Range(0, 0, 0, 0), vscode.TextEditorRevealType.AtTop);
+      log(`Reveal: ${relPath} → symbol "${sym ?? ''}" NOT found; opened at top.`);
     }
   }
 
-  /** Ask the language server for the symbol's location (most accurate). */
+  /**
+   * Ask the language server for the symbol's location (most accurate). Retries a
+   * couple of times because the provider is often not ready the instant a file is
+   * first opened (language server warm-up).
+   */
   private async findSymbolRange(uri: vscode.Uri, name: string): Promise<vscode.Range | undefined> {
-    try {
-      const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-        'vscode.executeDocumentSymbolProvider', uri,
-      );
-      if (!symbols || symbols.length === 0) return undefined;
-      const needle = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').toLowerCase();
-      const found = this.searchSymbols(symbols, needle);
-      return found?.selectionRange ?? found?.range;
-    } catch {
-      return undefined;
+    const needle = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').toLowerCase();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+          'vscode.executeDocumentSymbolProvider', uri,
+        );
+        if (symbols && symbols.length > 0) {
+          const found = this.searchSymbols(symbols, needle);
+          if (found) return found.selectionRange ?? found.range;
+          return undefined; // provider ready but no match — text search will handle it
+        }
+      } catch {
+        /* retry */
+      }
+      await new Promise((r) => setTimeout(r, 350));
     }
+    return undefined;
   }
 
   private searchSymbols(symbols: vscode.DocumentSymbol[], needle: string): vscode.DocumentSymbol | undefined {
