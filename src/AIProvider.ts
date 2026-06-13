@@ -1,15 +1,14 @@
 import * as vscode from 'vscode';
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
 export class AIProvider {
   private static instance: AIProvider;
-  private genAI?: GoogleGenerativeAI;
-  private model?: GenerativeModel;
+  private client?: Groq;
 
   private constructor() {
     this.initialize();
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('jarvis.geminiApiKey')) {
+      if (e.affectsConfiguration('jarvis.groqApiKey')) {
         this.initialize();
       }
     });
@@ -23,21 +22,23 @@ export class AIProvider {
   }
 
   private initialize() {
-    const apiKey = vscode.workspace.getConfiguration('jarvis').get<string>('geminiApiKey');
+    const apiKey = vscode.workspace.getConfiguration('jarvis').get<string>('groqApiKey');
     if (apiKey) {
-      this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
+      this.client = new Groq({ apiKey });
     } else {
-      this.genAI = undefined;
-      this.model = undefined;
+      this.client = undefined;
     }
   }
 
   public async generateContent(prompt: string): Promise<string> {
-    if (!this.model) {
-      throw new Error('Gemini API key is not configured. Please add it in settings (jarvis.geminiApiKey).');
+    if (!this.client) {
+      throw new Error('Groq API key is not configured. Please add it in settings (jarvis.groqApiKey).');
     }
-    const result = await this.model.generateContent(prompt);
-    return result.response.text();
+    const completion = await this.client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1024,
+    });
+    return completion.choices[0]?.message?.content ?? '';
   }
 }

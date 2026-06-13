@@ -45,11 +45,11 @@
     "configuration": {
       "title": "Jarvis",
       "properties": {
-        "jarvis.geminiApiKey": {
+        "jarvis.groqApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Gemini API key for Jarvis AI.",
-          "markdownDescription": "Get a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey)"
+          "description": "Your Groq API key for Jarvis AI.",
+          "markdownDescription": "Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
         }
       }
     }
@@ -74,8 +74,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.14.0",
     "framer-motion": "^11.0.0",
+    "groq-sdk": "^1.2.1",
     "lucide-react": "^0.360.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
