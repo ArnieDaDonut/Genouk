@@ -28,6 +28,7 @@ export interface SessionPlan {
 export interface TourStop {
   title: string;
   file: string;
+  symbol: string;
   relatedFiles: string[];
   what: string;
   how: string;

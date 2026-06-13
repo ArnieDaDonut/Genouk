@@ -84,8 +84,13 @@ const StopRow: React.FC<{ stop: TourStop; index: number; onOpenFile: (f: string)
 
       {open && (
         <div style={{ padding: `0 ${t.space.sm}px ${t.space.sm}px`, display: 'flex', flexDirection: 'column', gap: t.space.sm }}>
-          <div style={{ display: 'flex', gap: t.space.xs, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: t.space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
             {stop.file && <FileChip file={stop.file} onOpen={onOpenFile} primary />}
+            {stop.symbol && (
+              <span style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted }}>
+                → {stop.symbol}
+              </span>
+            )}
             {stop.relatedFiles?.map((f) => <FileChip key={f} file={f} onOpen={onOpenFile} />)}
           </div>
           <div>

@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import Groq from 'groq-sdk';
-import { GoogleGenAI } from '@google/genai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -42,7 +41,7 @@ interface ResolvedOptions {
 export class AIProvider {
   private static instance: AIProvider;
   private groq?: Groq;
-  private gemini?: GoogleGenAI;
+  private geminiKey?: string;
 
   private constructor() {
     this.initialize();
@@ -69,8 +68,7 @@ export class AIProvider {
     // spike self-heals before we fall through to Gemini.
     this.groq = groqKey ? new Groq({ apiKey: groqKey, maxRetries: 4 }) : undefined;
 
-    const geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY;
-    this.gemini = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : undefined;
+    this.geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY || undefined;
   }
 
   /** Providers to try, in order, given the keys currently configured. */
@@ -98,23 +96,12 @@ export class AIProvider {
       });
     }
 
-    if (this.gemini) {
-      const gemini = this.gemini;
+    if (this.geminiKey) {
+      const key = this.geminiKey;
       const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
       list.push({
         name: 'Gemini',
-        generate: async (userContent, systemContent, opts) => {
-          const response = await gemini.models.generateContent({
-            model: geminiModel,
-            contents: userContent,
-            config: {
-              systemInstruction: systemContent,
-              maxOutputTokens: opts.maxTokens,
-              temperature: opts.temperature,
-            },
-          });
-          return response.text ?? '';
-        },
+        generate: (userContent, systemContent, opts) => callGemini(key, geminiModel, userContent, systemContent, opts),
       });
     }
 
@@ -160,4 +147,42 @@ export class AIProvider {
     const detail = lastError instanceof Error ? lastError.message : String(lastError);
     throw new Error(`All AI providers failed. Last error: ${detail}`);
   }
+}
+
+/**
+ * Call the Gemini REST API directly via fetch. We deliberately avoid the
+ * `@google/genai` SDK: it pulls in Google's auth stack, websockets, and stream
+ * polyfills (~1.5MB bundled) for what is a single JSON POST. Node 18+ (our
+ * target) ships a global `fetch`.
+ */
+async function callGemini(
+  apiKey: string,
+  model: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const body: Record<string, unknown> = {
+    contents: [{ parts: [{ text: userContent }] }],
+    generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
+  };
+  if (systemContent) {
+    body.system_instruction = { parts: [{ text: systemContent }] };
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+  }
+
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
 }

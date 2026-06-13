@@ -9,6 +9,8 @@ export interface TourStop {
   title: string;
   /** Workspace-relative file path the stop centers on (clickable in the UI). */
   file: string;
+  /** The key function/class/identifier in `file` to jump to and highlight. */
+  symbol: string;
   /** Other relevant files for this area. */
   relatedFiles: string[];
   /** One-paragraph plain-language explanation of what this area does. */
@@ -121,12 +123,13 @@ Produce a tour with these parts:
 - "stops": an ORDERED list of 5-9 tour stops, each covering one meaningful feature or subsystem. Order them so a newcomer can follow the flow (start at the entry point, then the core features). For each stop:
   - "title": the feature/subsystem name.
   - "file": the single most relevant workspace-relative file path (must be a real path from the context).
+  - "symbol": the name of the single most important function, class, method, or exported identifier in "file" for this stop — copied EXACTLY as it appears in the code (e.g. "reviewPrompt", "class SessionStore", "generateTour"). This is used to jump to and highlight that code, so it must be a real identifier visible in the provided file contents. Use a bare name, no parentheses. If nothing specific fits, use "".
   - "relatedFiles": 0-4 other real, relevant file paths.
   - "what": plain-language explanation of what this area does and why it exists.
   - "how": how it works — the key functions/classes involved and the flow between them.
 
 Reply with ONLY a valid JSON object, no markdown fences:
-{"summary":"string","inferred":boolean,"architecture":"string","techStack":["string"],"stops":[{"title":"string","file":"string","relatedFiles":["string"],"what":"string","how":"string"}]}`;
+{"summary":"string","inferred":boolean,"architecture":"string","techStack":["string"],"stops":[{"title":"string","file":"string","symbol":"string","relatedFiles":["string"],"what":"string","how":"string"}]}`;
 
 export class CodebaseTourGenerator {
   async generateTour(description?: string): Promise<CodebaseTour> {
@@ -152,6 +155,7 @@ export class CodebaseTourGenerator {
       if (!Array.isArray(parsed.techStack)) parsed.techStack = [];
       for (const stop of parsed.stops) {
         if (!Array.isArray(stop.relatedFiles)) stop.relatedFiles = [];
+        if (typeof stop.symbol !== 'string') stop.symbol = '';
       }
       return parsed;
     } catch {

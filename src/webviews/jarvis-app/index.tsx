@@ -337,7 +337,7 @@ const App = () => {
     const stop = tour.stops[tourStep];
     setActiveStop(tourStep);
     setActiveTab('tour');
-    if (stop.file) vscode.postMessage({ type: 'openFile', value: stop.file });
+    if (stop.file) vscode.postMessage({ type: 'revealInFile', value: { file: stop.file, symbol: stop.symbol } });
     setWalkSignal(Date.now());
     speak(`Stop ${tourStep + 1} of ${tour.stops.length} — ${stop.title}. ${stop.what}`);
 

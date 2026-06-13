@@ -13,11 +13,23 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
   private tourGenerator = new CodebaseTourGenerator();
   private _extensionUri: vscode.Uri;
 
+  // Spotlight used by the live tour to highlight a symbol; cleared on a timer.
+  private readonly tourHighlight = vscode.window.createTextEditorDecorationType({
+    backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+    border: '1px solid',
+    borderColor: new vscode.ThemeColor('editor.findMatchHighlightBorder'),
+    borderRadius: '2px',
+    overviewRulerColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+    overviewRulerLane: vscode.OverviewRulerLane.Center,
+  });
+  private highlightClearTimer?: ReturnType<typeof setTimeout>;
+
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _store: SessionStore,
   ) {
     this._extensionUri = _context.extensionUri;
+    this._context.subscriptions.push(this.tourHighlight);
 
     // Listeners for audio vibe events and compiler score updates
     this._context.subscriptions.push(
@@ -114,6 +126,10 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
           await this.openWorkspaceFile(data.value);
           break;
         }
+        case 'revealInFile': {
+          await this.revealInFile(data.value?.file, data.value?.symbol);
+          break;
+        }
       }
     });
   }
@@ -130,6 +146,88 @@ export class JarvisSidebarProvider implements vscode.WebviewViewProvider {
     } catch {
       vscode.window.showWarningMessage(`Genouk: couldn't open ${relPath}`);
     }
+  }
+
+  /**
+   * Open a file and spotlight a symbol inside it: select it, scroll it to the
+   * center, and paint a fading highlight. Used by the live tour to "point at"
+   * the function each stop is about. Falls back to a plain text match, then to
+   * just opening the file if the symbol can't be located.
+   */
+  private async revealInFile(relPath: string, symbol?: string) {
+    if (!relPath) return;
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return;
+
+    let editor: vscode.TextEditor;
+    let doc: vscode.TextDocument;
+    try {
+      const uri = vscode.Uri.joinPath(folders[0].uri, relPath);
+      doc = await vscode.workspace.openTextDocument(uri);
+      editor = await vscode.window.showTextDocument(doc, { preview: true });
+    } catch {
+      vscode.window.showWarningMessage(`Genouk: couldn't open ${relPath}`);
+      return;
+    }
+
+    let range: vscode.Range | undefined;
+    if (symbol && symbol.trim()) {
+      range = await this.findSymbolRange(doc.uri, symbol.trim()) ?? this.findTextRange(doc, symbol.trim());
+    }
+
+    if (range) {
+      editor.selection = new vscode.Selection(range.start, range.end);
+      editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+      editor.setDecorations(this.tourHighlight, [range]);
+      if (this.highlightClearTimer) clearTimeout(this.highlightClearTimer);
+      this.highlightClearTimer = setTimeout(() => {
+        editor.setDecorations(this.tourHighlight, []);
+      }, 6000);
+    } else {
+      editor.revealRange(new vscode.Range(0, 0, 0, 0), vscode.TextEditorRevealType.AtTop);
+    }
+  }
+
+  /** Ask the language server for the symbol's location (most accurate). */
+  private async findSymbolRange(uri: vscode.Uri, name: string): Promise<vscode.Range | undefined> {
+    try {
+      const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+        'vscode.executeDocumentSymbolProvider', uri,
+      );
+      if (!symbols || symbols.length === 0) return undefined;
+      const needle = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').toLowerCase();
+      const found = this.searchSymbols(symbols, needle);
+      return found?.selectionRange ?? found?.range;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private searchSymbols(symbols: vscode.DocumentSymbol[], needle: string): vscode.DocumentSymbol | undefined {
+    // Prefer an exact name match anywhere in the tree, else a contains-match.
+    let contains: vscode.DocumentSymbol | undefined;
+    const visit = (list: vscode.DocumentSymbol[]): vscode.DocumentSymbol | undefined => {
+      for (const s of list) {
+        const n = s.name.toLowerCase();
+        if (n === needle) return s;
+        if (!contains && n.includes(needle)) contains = s;
+        if (s.children?.length) {
+          const hit = visit(s.children);
+          if (hit) return hit;
+        }
+      }
+      return undefined;
+    };
+    return visit(symbols) ?? contains;
+  }
+
+  /** Last-resort: find the literal identifier text in the document. */
+  private findTextRange(doc: vscode.TextDocument, name: string): vscode.Range | undefined {
+    const bare = name.replace(/^(class|function|const|interface|enum|type)\s+/i, '').trim();
+    const text = doc.getText();
+    const idx = text.search(new RegExp(`\\b${bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`));
+    if (idx < 0) return undefined;
+    return new vscode.Range(doc.positionAt(idx), doc.positionAt(idx + bare.length));
   }
 
   private updateDiagnosticsScore() {
