@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { analyzeBlastRadius } from './analyzer';
 import { applyDecorations, clearDecorations, disposeDecorations } from './overlayDecorator';
 import { BlastRadiusSidebarPanel } from './sidebarPanel';
+import { BlastRadiusWebviewPanel } from './webviewPanel';
 import { explainNode } from './nodeExplainer';
 import { getBlastRadiusMaxDepth } from '../shared/config';
 import { logger } from '../shared/logger';
@@ -9,6 +10,7 @@ import { logger } from '../shared/logger';
 export class BlastRadiusProvider implements vscode.Disposable {
   private sidebar: BlastRadiusSidebarPanel;
   private treeView: vscode.TreeView<unknown>;
+  private webviewPanel: BlastRadiusWebviewPanel;
   private disposables: vscode.Disposable[] = [];
 
   constructor(context: vscode.ExtensionContext) {
@@ -19,7 +21,8 @@ export class BlastRadiusProvider implements vscode.Disposable {
       treeDataProvider: this.sidebar,
       showCollapseAll: true,
     });
-    this.disposables.push(this.treeView);
+    this.webviewPanel = new BlastRadiusWebviewPanel(context.extensionUri);
+    this.disposables.push(this.treeView, this.webviewPanel);
   }
 
   /** Run blast radius analysis on the current cursor position */
@@ -53,8 +56,9 @@ export class BlastRadiusProvider implements vscode.Disposable {
           // Apply editor decorations
           applyDecorations(result.allNodes);
 
-          // Reveal sidebar
+          // Reveal sidebar and React Webview
           await vscode.commands.executeCommand('workbench.view.explorer');
+          this.webviewPanel.showResult(result);
 
           const totalCallers = result.allNodes.length - 1;
           const fileCount = result.affectedFiles.length;
@@ -91,6 +95,7 @@ export class BlastRadiusProvider implements vscode.Disposable {
     this.clear();
     disposeDecorations();
     this.sidebar.dispose();
+    this.webviewPanel.dispose();
     this.disposables.forEach((d) => d.dispose());
   }
 }
