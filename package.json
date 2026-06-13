@@ -95,6 +95,7 @@
     "@anthropic-ai/sdk": "^0.104.1",
     "@google/genai": "^2.8.0",
     "@google/generative-ai": "^0.14.0",
+    "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
     "groq-sdk": "^1.2.1",
     "lucide-react": "^0.360.0",
