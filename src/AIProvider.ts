@@ -15,10 +15,19 @@ export interface GenerateOptions {
   model?: string;
 }
 
-const DEFAULT_VULTR_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
+const DEFAULT_VULTR_MODEL = 'nvidia/DeepSeek-V3.2-NVFP4';
 const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
+
+// When the configured model is gone (Vultr rotates its catalogue), fall back to
+// the first of these that the live /models list still serves.
+const VULTR_FALLBACK_PRIORITY = [
+  'nvidia/DeepSeek-V3.2-NVFP4',
+  'moonshotai/Kimi-K2.6',
+  'zai-org/GLM-5.1-FP8',
+  'MiniMaxAI/MiniMax-M2.7',
+];
 
 /** One backend Genouk can call. Tried in order; the first that succeeds wins. */
 interface Provider {
@@ -64,7 +73,7 @@ export class AIProvider {
       list.push({
         name: 'Vultr',
         generate: (userContent, systemContent, opts) =>
-          callVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
+          generateVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
       });
     }
 
@@ -126,6 +135,75 @@ function shorten(msg: string): string {
   return text.length > 200 ? text.slice(0, 200) + '…' : text;
 }
 
+// Cached /models list (Vultr's catalogue changes rarely; refresh every 5 min).
+let modelListCache: { ids: string[]; at: number } | null = null;
+// Remembers a working substitute once a configured model turns out to be gone,
+// so subsequent calls skip the failed attempt entirely.
+const resolvedModels = new Map<string, string>();
+
+/** Fetch the ids Vultr currently serves, cached. Returns [] (last good) on failure. */
+async function listVultrModels(apiKey: string): Promise<string[]> {
+  const now = Date.now();
+  if (modelListCache && now - modelListCache.at < 5 * 60 * 1000) return modelListCache.ids;
+  try {
+    const res = await fetch(`${VULTR_BASE_URL}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return modelListCache?.ids ?? [];
+    const data = (await res.json()) as { data?: { id?: string; object?: string }[] };
+    const ids = (data.data ?? [])
+      .filter((m) => m.object === 'model' && typeof m.id === 'string')
+      .map((m) => m.id as string);
+    modelListCache = { ids, at: now };
+    return ids;
+  } catch {
+    return modelListCache?.ids ?? [];
+  }
+}
+
+/** Pick a valid chat model from the live list, preferring our priority order. */
+async function pickValidModel(apiKey: string, exclude: string): Promise<string | null> {
+  const ids = await listVultrModels(apiKey);
+  if (ids.length === 0) return null;
+  const available = new Set(ids);
+  for (const candidate of VULTR_FALLBACK_PRIORITY) {
+    if (candidate !== exclude && available.has(candidate)) return candidate;
+  }
+  // No preferred model available — take any general model (skip safety/guard ones).
+  return ids.find((id) => id !== exclude && !/safety|guard|content/i.test(id)) ?? null;
+}
+
+/** Auth/quota failures won't be fixed by swapping the model; everything else can be. */
+function isModelSwappable(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status !== 401 && status !== 403 && status !== 429;
+}
+
+/**
+ * Call Vultr, and if the configured model is unavailable (or its engine errors),
+ * resolve a valid model from the live /models list and retry once — caching the
+ * substitute so the next call goes straight to the working model.
+ */
+async function generateVultr(
+  apiKey: string,
+  desiredModel: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const model = resolvedModels.get(desiredModel) ?? desiredModel;
+  try {
+    return await callVultr(apiKey, model, userContent, systemContent, opts);
+  } catch (err) {
+    if (!isModelSwappable(err)) throw err;
+    const fallback = await pickValidModel(apiKey, model);
+    if (!fallback || fallback === model) throw err;
+    log(`Vultr model '${model}' unavailable — falling back to '${fallback}'.`);
+    resolvedModels.set(desiredModel, fallback);
+    return await callVultr(apiKey, fallback, userContent, systemContent, opts);
+  }
+}
+
 /**
  * Call Vultr Serverless Inference. Its chat API is OpenAI-compatible, so a plain
  * fetch is all we need — no SDK. Endpoint and auth per Vultr's inference docs.
@@ -156,7 +234,9 @@ async function callVultr(
   });
 
   if (!res.ok) {
-    throw new Error(`Vultr ${res.status}: ${await res.text()}`);
+    const err = new Error(`Vultr ${res.status}: ${await res.text()}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
 
   // Some Vultr-hosted models are reasoning models: when the final answer is

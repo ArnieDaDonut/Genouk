@@ -19,6 +19,12 @@ import * as crypto from 'crypto';
 export interface SessionDigest {
   /** Stable unique id (also the basis for de-duping). */
   id: string;
+  /**
+   * The agent chat session this digest belongs to, when known. Set by the auto-save Stop
+   * hook so repeated saves during one chat upsert a SINGLE digest instead of piling up one
+   * per turn. Absent on digests authored by the save_context MCP tool.
+   */
+  sessionId?: string;
   /** ISO timestamp of when the session was saved. */
   ts: string;
   /** One-line title for the session, e.g. "Wired up the score-reactive music engine". */
@@ -143,6 +149,54 @@ export function updateLatestDigest(repoPath: string, patch: UpdateInput): Sessio
   };
 
   all[0] = updated;
+  writeAll(repoPath, all);
+  return updated;
+}
+
+/**
+ * Insert-or-update the digest for a given agent chat session. The auto-save Stop hook calls
+ * this on EVERY turn end (Claude Code has no "chat ended" event), so keying by sessionId means
+ * one chat collapses to one continuously-refreshed digest instead of a new digest per turn.
+ *
+ * If a digest for this sessionId exists, title/summary are replaced (each turn re-derives them
+ * from the whole transcript, so the latest is the most complete) and array fields are merged.
+ * Otherwise a fresh digest is created. Returns the stored record.
+ */
+export function upsertSessionDigest(repoPath: string, sessionId: string, input: SaveInput): SessionDigest {
+  const all = loadDigests(repoPath);
+  const idx = all.findIndex((d) => d.sessionId && d.sessionId === sessionId);
+  const mergeUnique = (prev: string[], next?: string[]) =>
+    Array.from(new Set([...prev, ...clean(next)]));
+
+  if (idx === -1) {
+    const digest: SessionDigest = {
+      id: crypto.randomUUID(),
+      sessionId,
+      ts: new Date().toISOString(),
+      title: (input.title || 'Untitled session').trim(),
+      summary: (input.summary || '').trim(),
+      decisions: clean(input.decisions),
+      files: clean(input.files),
+      openThreads: clean(input.openThreads),
+      resolvedThreads: clean(input.resolvedThreads),
+    };
+    all.unshift(digest);
+    writeAll(repoPath, all);
+    return digest;
+  }
+
+  const prev = all[idx];
+  const updated: SessionDigest = {
+    ...prev,
+    ts: new Date().toISOString(),
+    title: input.title?.trim() || prev.title,
+    summary: input.summary?.trim() || prev.summary,
+    decisions: mergeUnique(prev.decisions, input.decisions),
+    files: mergeUnique(prev.files, input.files),
+    openThreads: mergeUnique(prev.openThreads, input.openThreads),
+    resolvedThreads: mergeUnique(prev.resolvedThreads || [], input.resolvedThreads),
+  };
+  all[idx] = updated;
   writeAll(repoPath, all);
   return updated;
 }

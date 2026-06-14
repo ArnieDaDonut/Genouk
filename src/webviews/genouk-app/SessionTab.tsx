@@ -64,8 +64,8 @@ export const SessionTab: React.FC<Props> = ({ plan, loading, onGenerate, onSave,
 
   return (
     <Card style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: t.space.sm }}>
-        <div style={{ minWidth: 0 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: t.space.sm }}>
+        <div style={{ minWidth: 0, flex: '1 1 180px' }}>
           <Label color={t.color.accent}>Active plan</Label>
           <h3 style={{ margin: '4px 0 2px', fontSize: t.font.size.lg, fontWeight: t.font.weight.semibold, color: t.color.fg }}>{plan.goal}</h3>
           <span style={{ fontSize: t.font.size.sm, color: t.color.muted }}>Est. {plan.estimatedDuration}</span>

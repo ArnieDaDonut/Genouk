@@ -178,6 +178,10 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const frameSize = 128;
   const displayWidth = frameSize * displayScale;
   const displayHeight = frameSize * displayScale;
+  // Each sprite frame has large transparent margins, so the full 384px box reads
+  // as mostly empty. Show him in a shorter window (the sprite stays full size and
+  // is centered; the dead top/bottom padding is clipped) to reclaim that space.
+  const spriteBoxHeight = Math.round(displayHeight * 0.62);
 
   // The courier is a smaller version of the same sheets.
   const courierScale = 0.9;
@@ -652,10 +656,11 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
           position: 'relative',
           width: '100%',
           maxWidth: 360,
-          height: displayHeight,
+          height: spriteBoxHeight,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          overflow: 'hidden',
           zIndex: 1,
         }}
       >
