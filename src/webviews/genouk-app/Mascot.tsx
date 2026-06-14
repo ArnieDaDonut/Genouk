@@ -14,8 +14,6 @@ interface MascotProps {
   thinking: boolean;
   /** Latest prompt review; reacts when a new one arrives. */
   review: PromptReviewResult | null;
-  /** Latest change-review text (INTENT + BLOCKER/WARNING/NIT). */
-  changeReview: string;
   /** Latest session plan; reacts when a task completes. */
   sessionPlan: SessionPlan | null;
   /** Latest playSFX event, bumped by nonce so repeats re-trigger. */
@@ -117,7 +115,7 @@ const pressButton = (button: HTMLElement) => {
   button.click();
 };
 
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, accessory, onDoubleActivate, tourPlaying }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, sessionPlan, sfx, errand, say, walkSignal, accessory, onDoubleActivate, tourPlaying }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
   const tourSpriteUrl = window.PET_TOUR_SPRITE || '';
@@ -358,17 +356,6 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     }
     prevReview.current = review;
   }, [review, react]);
-
-  // Change review -> alarmed on any BLOCKER, thumbs-up when clean.
-  const prevChange = useRef(changeReview);
-  useEffect(() => {
-    if (changeReview && changeReview !== prevChange.current) {
-      const hasBlocker = /\bBLOCKER\s*[:\-]/i.test(changeReview);
-      if (hasBlocker) react('alarmed', quip('blocker'));
-      else react('thumbsup', quip('clean'));
-    }
-    prevChange.current = changeReview;
-  }, [changeReview, react]);
 
   // playSFX -> quiet blink on save, celebratory hop on build pass, facepalm on fail.
   const prevSfx = useRef(0);

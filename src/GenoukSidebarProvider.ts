@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { PromptReviewer } from './PromptReviewer';
-import { ChangeReviewer } from './ChangeReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
@@ -18,7 +17,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   private readonly _extensionUri: vscode.Uri;
 
   private readonly promptReviewer = new PromptReviewer();
-  private readonly changeReviewer = new ChangeReviewer();
   private readonly tourGenerator = new CodebaseTourGenerator();
 
   /** Send a message to the webview if it's currently resolved. */
@@ -102,15 +100,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
-        case 'reviewChanges': {
-          try {
-            const review = await this.changeReviewer.reviewChanges();
-            this.post({ type: 'changeReviewResult', value: review });
-          } catch (error: any) {
-            this.post({ type: 'error', value: error.message });
-          }
-          break;
-        }
         case 'getSessionPlan': {
           this.post({ type: 'sessionPlan', value: this._store.get() });
           break;
@@ -128,8 +117,26 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+        case 'extendSessionPlan': {
+          if (!data.value) return;
+          try {
+            await this._store.extend(data.value);
+          } catch (error: any) {
+            this.post({ type: 'error', value: error.message });
+          } finally {
+            this.post({ type: 'extendSessionPlanDone' });
+          }
+          break;
+        }
         case 'syncToLinear': {
           await handleLinearSync(this._store, webviewView.webview);
+          break;
+        }
+        case 'copyText': {
+          if (typeof data.value === 'string') {
+            await vscode.env.clipboard.writeText(data.value);
+            vscode.window.showInformationMessage(data.label ? `${data.label} copied to clipboard.` : 'Copied to clipboard.');
+          }
           break;
         }
         case 'openPlanner': {

@@ -28,6 +28,16 @@ export class SessionStore {
     return plan;
   }
 
+  /** Append AI-generated tasks to the current plan (no-op if there's no plan). */
+  async extend(instruction: string): Promise<SessionPlan | null> {
+    const current = this.get();
+    if (!current) return null;
+    const newTasks = await this.planner.extendSessionPlan(current, instruction);
+    const plan: SessionPlan = { ...current, tasks: [...current.tasks, ...newTasks] };
+    await this.set(plan);
+    return plan;
+  }
+
   dispose(): void {
     this._onDidChange.dispose();
   }

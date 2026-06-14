@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ListTodo, RefreshCw, X, Bell, AlertCircle } from 'lucide-react';
+import { ListTodo, RefreshCw, X, Bell, AlertCircle, Copy, Sparkles, Eraser } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { t } from './theme';
 import { Card, Label, PrimaryButton, GhostButton, LoadingRow } from './ui';
 import { SessionPlan } from './types';
-import { addTask, setStatus } from './taskUtils';
+import { addTask, setStatus, clearCompleted, planToMarkdown, planStats } from './taskUtils';
 import { TaskBoard, PlanSummary } from './TaskBoard';
 import { AddTaskForm } from './AddTaskForm';
 import { FocusTimerCard } from './FocusTimerCard';
@@ -26,6 +26,8 @@ export const PlannerView: React.FC = () => {
   const [error, setError] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
   const [syncingLinear, setSyncingLinear] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [extendText, setExtendText] = useState('');
 
   const planRef = useRef<SessionPlan | null>(null);
   useEffect(() => { planRef.current = plan; }, [plan]);
@@ -41,10 +43,15 @@ export const PlannerView: React.FC = () => {
         case 'syncToLinearResult':
           setSyncingLinear(false);
           break;
+        case 'extendSessionPlanDone':
+          setExtending(false);
+          setExtendText('');
+          break;
         case 'error':
           setError(message.value);
           setLoading(false);
           setSyncingLinear(false);
+          setExtending(false);
           break;
       }
     };
@@ -69,6 +76,24 @@ export const PlannerView: React.FC = () => {
     setSyncingLinear(true);
     setError('');
     vscode.postMessage({ type: 'syncToLinear' });
+  };
+
+  const handleExportMarkdown = () => {
+    if (!plan) return;
+    vscode.postMessage({ type: 'copyText', value: planToMarkdown(plan), label: 'Plan' });
+    showBanner('Plan copied as Markdown. 📋');
+  };
+
+  const handleClearDone = () => {
+    if (!plan) return;
+    save(clearCompleted(plan));
+  };
+
+  const handleExtend = () => {
+    if (!extendText.trim() || extending) return;
+    setExtending(true);
+    setError('');
+    vscode.postMessage({ type: 'extendSessionPlan', value: extendText.trim() });
   };
 
   const getNextTaskTitle = (): string | null => nextTaskTitle(planRef.current);
@@ -154,6 +179,9 @@ export const PlannerView: React.FC = () => {
         </div>
         {plan && (
           <div style={{ display: 'flex', gap: t.space.sm }}>
+            <GhostButton onClick={handleExportMarkdown} title="Copy plan as a Markdown checklist">
+              <Copy size={13} /> Export MD
+            </GhostButton>
             <GhostButton onClick={handleSyncLinear} disabled={syncingLinear} title="Sync tasks to Linear">
               <RefreshCw size={13} className={syncingLinear ? "genouk-spin" : ""} /> {syncingLinear ? "Syncing..." : "Sync Linear"}
             </GhostButton>
@@ -236,7 +264,32 @@ export const PlannerView: React.FC = () => {
             <div style={{ flex: '3 1 480px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: t.space.md }}>
               <Card style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
                 <TaskBoard plan={plan} onSave={save} layout="columns" />
+                {planStats(plan).done > 0 && (
+                  <GhostButton onClick={handleClearDone} title="Remove completed tasks" style={{ alignSelf: 'flex-start' }}>
+                    <Eraser size={13} /> Clear {planStats(plan).done} done
+                  </GhostButton>
+                )}
               </Card>
+
+              {/* Extend the plan with more AI-generated tasks */}
+              <Card style={{ display: 'flex', flexDirection: 'column', gap: t.space.sm }}>
+                <Label color={t.color.accent}>Add tasks with AI</Label>
+                <div style={{ display: 'flex', gap: t.space.sm }}>
+                  <input
+                    type="text"
+                    value={extendText}
+                    onChange={(e) => setExtendText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleExtend(); }}
+                    placeholder="e.g. add tests and error handling…"
+                    disabled={extending}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <PrimaryButton onClick={handleExtend} disabled={!extendText.trim() || extending}>
+                    <Sparkles size={14} /> {extending ? 'Adding…' : 'Add'}
+                  </PrimaryButton>
+                </div>
+              </Card>
+
               <AddTaskForm onAdd={(task) => save(addTask(plan, task))} />
             </div>
           </div>

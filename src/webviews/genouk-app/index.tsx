@@ -13,10 +13,10 @@ import { MemoryTab } from './MemoryTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
-import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted, MusicCue } from './musicEngine';
+import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted } from './musicEngine';
 import { PlannerView } from './PlannerView';
 import { BREAK_NUDGES } from './quips';
-import { nextTaskTitle, setStatus } from './taskUtils';
+import { nextTaskTitle, setStatus, planToMarkdown } from './taskUtils';
 
 
 
@@ -54,10 +54,6 @@ const App = () => {
   const [prompt, setPrompt] = useState('');
   const [review, setReview] = useState<PromptReviewResult | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
-
-  // Change review
-  const [changeReview, setChangeReview] = useState('');
-  const [changeLoading, setChangeLoading] = useState(false);
 
   // Session
   const [sessionPlan, setSessionPlan] = useState<SessionPlan | null>(null);
@@ -165,9 +161,6 @@ const App = () => {
   const [audioUnlocked, setAudioUnlocked] = useState(true);
   const [vibe, setVibe] = useState<VibeState>({ score: null, vibe: 'idle', errorsCount: 0, warningsCount: 0, fileName: '' });
 
-  // Last score-reactive music phrase that played (synthesized live, see musicEngine).
-  const [, setMusicCue] = useState<MusicCue | null>(null);
-
   // Latest playSFX event, surfaced to the Mascot. nonce makes repeats re-trigger.
   const [sfx, setSfx] = useState<{ kind: string; nonce: number } | null>(null);
 
@@ -187,6 +180,7 @@ const App = () => {
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   const [syncingLinear, setSyncingLinear] = useState(false);
+  const [extendingSession, setExtendingSession] = useState(false);
 
   // Host -> webview messages
   useEffect(() => {
@@ -251,7 +245,7 @@ const App = () => {
           setPromptLoading(false);
           // Play a synthesized phrase that matches how good the prompt scored.
           if (typeof message.value?.score === 'number') {
-            setMusicCue(playForScore(message.value.score));
+            playForScore(message.value.score);
           }
           break;
         case 'promptRewriteResult':
@@ -267,12 +261,11 @@ const App = () => {
               : prev,
           );
           break;
-        case 'changeReviewResult':
-          setChangeReview(message.value);
-          setChangeLoading(false);
-          break;
         case 'syncToLinearResult':
           setSyncingLinear(false);
+          break;
+        case 'extendSessionPlanDone':
+          setExtendingSession(false);
           break;
         case 'tourStepDelta':
           if (typeof message.value === 'number') {
@@ -282,9 +275,9 @@ const App = () => {
         case 'error':
           setError(message.value);
           setPromptLoading(false);
-          setChangeLoading(false);
           setSessionLoading(false);
           setSyncingLinear(false);
+          setExtendingSession(false);
           setTourLoading(false);
           break;
       }
@@ -391,6 +384,18 @@ const App = () => {
     setSyncingLinear(true);
     setError('');
     vscode.postMessage({ type: 'syncToLinear' });
+  };
+
+  const handleExtendSession = (instruction: string) => {
+    if (!instruction.trim() || extendingSession) return;
+    setExtendingSession(true);
+    setError('');
+    vscode.postMessage({ type: 'extendSessionPlan', value: instruction.trim() });
+  };
+
+  const handleExportSession = () => {
+    if (!sessionPlanRef.current) return;
+    vscode.postMessage({ type: 'copyText', value: planToMarkdown(sessionPlanRef.current), label: 'Plan' });
   };
 
   const handleGenerateTour = (description: string) => {
@@ -563,9 +568,8 @@ const App = () => {
       {/* Genouk character — docked at the top so he's front and centre */}
       <Mascot
         vibe={vibe}
-        thinking={promptLoading || changeLoading || sessionLoading}
+        thinking={promptLoading || sessionLoading}
         review={review}
-        changeReview={changeReview}
         sessionPlan={sessionPlan}
         sfx={sfx}
         errand={errand}
@@ -687,6 +691,9 @@ const App = () => {
               onPopout={() => vscode.postMessage({ type: 'openPlanner' })}
               onSyncLinear={handleSyncLinear}
               syncingLinear={syncingLinear}
+              onExtend={handleExtendSession}
+              extending={extendingSession}
+              onExport={handleExportSession}
             />
           </div>
         )}
