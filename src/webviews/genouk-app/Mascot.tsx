@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useAnimationControls } from 
 import { t } from './theme';
 import { PromptReviewResult, SessionPlan, VibeState } from './types';
 import { quip, bankForScore, QuipBank } from './quips';
-import { findAccessory } from './accessories';
+import { findAccessory, accessoryImageUrl } from './accessories';
 
 declare const window: any;
 
@@ -111,6 +111,10 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const [reaction, setReaction] = useState<{ kind: ReactionKind; text: string | null } | null>(null);
   const [asleep, setAsleep] = useState(false);
   const [strolling, setStrolling] = useState(false);
+  // True once the worn accessory's cut-out PNG fails to load, so we fall back to
+  // its emoji. Reset whenever the chosen accessory changes.
+  const [accImgBroken, setAccImgBroken] = useState(false);
+  useEffect(() => { setAccImgBroken(false); }, [accessory]);
 
   // The "courier" — a separate overlay sprite that runs across the panel to press
   // a button for you, then scurries back off the left edge.
@@ -456,6 +460,13 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   }
 
   const worn = findAccessory(accessory ?? 'none');
+  const wornImg = accessoryImageUrl(worn);
+  const wornLeft = worn.left ?? '48%';
+  // Keep the accessory upright (counter-mirror) while the walk sheet is flipped.
+  const accessoryTransform =
+    `translateX(-50%)` +
+    (worn.rotate ? ` rotate(${worn.rotate}deg)` : '') +
+    (phase === 'walking' ? ` scaleX(${facingFlip})` : '');
 
   const sprite = (
     <div
@@ -482,23 +493,44 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
         transform: phase === 'walking' ? `scaleX(${facingFlip})` : undefined,
       }}
     >
-      {worn.emoji && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: worn.top,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: worn.size,
-            lineHeight: 1,
-            pointerEvents: 'none',
-            // Counter-mirror so the accessory stays upright while walking.
-            ...(phase === 'walking' ? { transform: `translateX(-50%) scaleX(${facingFlip})` } : {}),
-          }}
-        >
-          {worn.emoji}
-        </span>
+      {worn.id !== 'none' && (
+        wornImg && !accImgBroken ? (
+          <img
+            src={wornImg}
+            alt=""
+            aria-hidden="true"
+            onError={() => setAccImgBroken(true)}
+            style={{
+              position: 'absolute',
+              top: worn.top,
+              left: wornLeft,
+              width: worn.width,
+              height: 'auto',
+              transform: accessoryTransform,
+              transformOrigin: 'center top',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              // Cosmetics are detailed art, not pixel-art — render them smoothly.
+              imageRendering: 'auto',
+              filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.35))',
+            }}
+          />
+        ) : worn.emoji ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: worn.top,
+              left: wornLeft,
+              transform: accessoryTransform,
+              fontSize: worn.size,
+              lineHeight: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            {worn.emoji}
+          </span>
+        ) : null
       )}
     </div>
   );

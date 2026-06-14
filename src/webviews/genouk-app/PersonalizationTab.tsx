@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Volume2, Check } from 'lucide-react';
 import { t } from './theme';
 import { Card, Label } from './ui';
 import { Personalization } from './types';
-import { ACCESSORIES } from './accessories';
+import { ACCESSORIES, Accessory, accessoryImageUrl } from './accessories';
 import { SFX_MENU, SfxName } from './musicEngine';
 
 interface Props {
@@ -58,6 +58,23 @@ function SoundRow({
   );
 }
 
+/** Thumbnail for an accessory: its cut-out PNG, falling back to the emoji. */
+function AccessoryThumb({ accessory }: { accessory: Accessory }) {
+  const [broken, setBroken] = useState(false);
+  const url = accessoryImageUrl(accessory);
+  if (url && !broken) {
+    return (
+      <img
+        src={url}
+        alt=""
+        onError={() => setBroken(true)}
+        style={{ width: 26, height: 26, objectFit: 'contain' }}
+      />
+    );
+  }
+  return <span style={{ fontSize: 22, lineHeight: 1 }}>{accessory.emoji || '🚫'}</span>;
+}
+
 export const PersonalizationTab: React.FC<Props> = ({ personalization, onChange, onPreviewSfx }) => {
   const setAccessory = (id: string) => onChange({ ...personalization, accessory: id });
   const setSfx = (slot: keyof Personalization['sfx'], name: string) =>
@@ -88,7 +105,7 @@ export const PersonalizationTab: React.FC<Props> = ({ personalization, onChange,
                   color: t.color.fg, minHeight: 58,
                 }}
               >
-                <span style={{ fontSize: 22, lineHeight: 1 }}>{a.emoji || '🚫'}</span>
+                <AccessoryThumb accessory={a} />
                 <span style={{ fontSize: t.font.size.xs, color: active ? t.color.fg : t.color.muted, textAlign: 'center' }}>{a.label}</span>
                 {active && (
                   <Check size={11} style={{ position: 'absolute', top: 3, right: 3, color: t.color.accent }} />
