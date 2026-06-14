@@ -254,3 +254,77 @@ export function clearDigests(repoPath: string): void {
     /* nothing to remove */
   }
 }
+
+/* ------------------------------------------------------------------------- *
+ * Durable facts
+ *
+ * Digests summarize *work*. Facts are the other half of memory: a flat list of
+ * things the user explicitly asked to be remembered — a name, a secret word, a
+ * URL, a preference — that should surface at the top of EVERY future chat,
+ * independent of any session. Stored in a sibling file so the digest format
+ * stays untouched.
+ * ------------------------------------------------------------------------- */
+
+export interface Fact {
+  id: string;
+  ts: string;
+  /** The thing to remember, verbatim, e.g. "The secret word is BANANA". */
+  text: string;
+}
+
+function factsFile(repoPath: string): string {
+  return path.join(memoryDir(), `${repoKey(repoPath)}.facts.json`);
+}
+
+/** All durable facts for a repo, newest first. */
+export function loadFacts(repoPath: string): Fact[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(factsFile(repoPath), 'utf8'));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remember a fact. If an identical fact (case-insensitive) already exists its
+ * timestamp is refreshed instead of storing a duplicate. Returns the record.
+ */
+export function saveFact(repoPath: string, text: string): Fact {
+  const clean = (text || '').trim();
+  const all = loadFacts(repoPath);
+  const existing = all.find((f) => f.text.toLowerCase() === clean.toLowerCase());
+
+  let record: Fact;
+  if (existing) {
+    existing.ts = new Date().toISOString();
+    record = existing;
+  } else {
+    record = { id: crypto.randomUUID(), ts: new Date().toISOString(), text: clean };
+    all.unshift(record);
+  }
+
+  fs.mkdirSync(memoryDir(), { recursive: true });
+  fs.writeFileSync(factsFile(repoPath), JSON.stringify(all, null, 2), 'utf8');
+  return record;
+}
+
+/** Forget a single fact by id. Returns true if one was removed. */
+export function deleteFact(repoPath: string, id: string): boolean {
+  const all = loadFacts(repoPath);
+  const next = all.filter((f) => f.id !== id);
+  if (next.length === all.length) return false;
+  fs.mkdirSync(memoryDir(), { recursive: true });
+  fs.writeFileSync(factsFile(repoPath), JSON.stringify(next, null, 2), 'utf8');
+  return true;
+}
+
+/** Forget every fact for a repo. */
+export function clearFacts(repoPath: string): void {
+  try {
+    fs.rmSync(factsFile(repoPath), { force: true });
+  } catch {
+    /* nothing to remove */
+  }
+}

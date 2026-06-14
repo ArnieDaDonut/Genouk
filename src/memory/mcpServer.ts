@@ -26,6 +26,9 @@ import {
   updateLatestDigest,
   aggregateOpenThreads,
   loadDigests,
+  loadFacts,
+  saveFact,
+  deleteFact,
 } from './sessionMemoryStore';
 
 const REPO = process.env.GENOUK_REPO || process.cwd();
@@ -52,7 +55,18 @@ function formatMany(digests: SessionDigest[], emptyMsg: string): string {
  */
 function buildRecall(limit: number): string {
   const all = loadDigests(REPO);
-  if (all.length === 0) return 'No previous session memory for this project yet. This is a fresh start — call save_context before you finish so the next chat can pick up from here.';
+  const facts = loadFacts(REPO);
+
+  // Durable facts come first — they're the user's explicit "remember this" notes and
+  // should be visible at the top of every chat, even before any session is recorded.
+  const factsBlock = facts.length
+    ? ['**📌 Remembered facts:**', ...facts.map((f) => `- ${f.text}`), ''].join('\n')
+    : '';
+
+  if (all.length === 0) {
+    const fresh = 'No previous session digests yet. This is a fresh start — call save_context before you finish so the next chat can pick up from here.';
+    return factsBlock ? `${factsBlock}\n${fresh}` : fresh;
+  }
 
   const recent = recentDigests(REPO, limit);
   const open = aggregateOpenThreads(REPO);
@@ -62,8 +76,9 @@ function buildRecall(limit: number): string {
   const head: string[] = [
     `# Continuing this project — ${all.length} past session${all.length === 1 ? '' : 's'} on record`,
     '',
-    `**Last session:** ${last.title} (${when})`,
   ];
+  if (factsBlock) head.push(factsBlock);
+  head.push(`**Last session:** ${last.title} (${when})`);
   if (open.length) {
     head.push('', `**⏳ Still open across past sessions (${open.length}) — start here:**`, ...open.map((x) => `- ${x}`));
     head.push('', 'When you finish any of these, pass them to save_context/update_context as `resolvedThreads` so they stop resurfacing.');
@@ -156,6 +171,53 @@ server.registerTool(
   async ({ query, limit }) => ({
     content: [{ type: 'text', text: formatMany(searchDigests(REPO, query, limit ?? 8), `No past sessions matched "${query}".`) }],
   }),
+);
+
+server.registerTool(
+  'remember',
+  {
+    title: 'Remember a durable fact',
+    description:
+      'Store a single fact the user wants remembered across ALL future chats in this project — ' +
+      'a name, a secret word, a URL, a preference, a value. Call this whenever the user says ' +
+      '"remember that…", "don\'t forget…", or tells you something they\'ll expect you to know ' +
+      'later. Stored facts appear at the top of every recall_context. One fact per call; phrase ' +
+      'it as a self-contained statement, e.g. "The secret word is BANANA".',
+    inputSchema: { fact: z.string().describe('The fact to remember, as a self-contained statement.') },
+  },
+  async ({ fact }) => {
+    const saved = saveFact(REPO, fact);
+    return { content: [{ type: 'text', text: `Remembered: "${saved.text}". It will appear in recall_context for every future chat in this project.` }] };
+  },
+);
+
+server.registerTool(
+  'forget',
+  {
+    title: 'Forget a remembered fact',
+    description: 'Remove a previously remembered fact. Pass the fact id shown by list_facts, or omit and list first.',
+    inputSchema: { id: z.string().describe('The id of the fact to forget (from list_facts).') },
+  },
+  async ({ id }) => {
+    const removed = deleteFact(REPO, id);
+    return { content: [{ type: 'text', text: removed ? `Forgot fact ${id}.` : `No fact with id ${id}.` }] };
+  },
+);
+
+server.registerTool(
+  'list_facts',
+  {
+    title: 'List remembered facts',
+    description: 'List every durable fact remembered for this project, with ids (use with forget).',
+    inputSchema: {},
+  },
+  async () => {
+    const facts = loadFacts(REPO);
+    const text = facts.length
+      ? facts.map((f) => `- [${f.id}] ${f.text}`).join('\n')
+      : 'No facts remembered for this project yet.';
+    return { content: [{ type: 'text', text }] };
+  },
 );
 
 server.registerResource(

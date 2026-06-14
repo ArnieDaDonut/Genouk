@@ -15,6 +15,7 @@ export type {
   VibeState,
   SessionDigest,
   MemoryData,
+  Fact,
 } from '../../shared/types';
 
 export {

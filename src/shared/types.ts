@@ -121,9 +121,17 @@ export interface SessionDigest {
   resolvedThreads?: string[];
 }
 
+export interface Fact {
+  id: string;
+  ts: string;
+  /** The thing to remember, verbatim, e.g. "The secret word is BANANA". */
+  text: string;
+}
+
 /** Everything the Memory tab needs: stored digests + how to wire the MCP server up. */
 export interface MemoryData {
   digests: SessionDigest[];
+  facts: Fact[];
   /** Pretty-printed .mcp.json snippet the user can copy into their agent. */
   mcpConfig: string;
   /** Absolute path where Genouk writes .mcp.json (the repo root), or null if no repo. */

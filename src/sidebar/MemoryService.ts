@@ -6,6 +6,9 @@ import {
   deleteDigest as deleteStoredDigest,
   clearDigests,
   renderCarryover,
+  loadFacts,
+  deleteFact as deleteStoredFact,
+  clearFacts,
 } from '../memory/sessionMemoryStore';
 
 /** Markers fencing Genouk's auto-managed carry-over block inside CLAUDE.md. */
@@ -60,6 +63,7 @@ export class MemoryService {
     const repoRoot = this.repoRoot();
     return {
       digests: repoRoot ? recentDigests(repoRoot, 25) : [],
+      facts: repoRoot ? loadFacts(repoRoot) : [],
       mcpConfig: repoRoot ? this.mcpConfigJson(repoRoot) : '',
       mcpConfigPath: repoRoot ? path.join(repoRoot, '.mcp.json') : null,
       configWritten: repoRoot ? this.isConfigWritten(repoRoot) : false,
@@ -126,6 +130,50 @@ export class MemoryService {
     }
   }
 
+  /** Path to the repo's CLAUDE.md, where the carry-over block is kept in sync. */
+  private claudeMdPath(repoRoot: string): string {
+    return path.join(repoRoot, 'CLAUDE.md');
+  }
+
+  /**
+   * Write the current carry-over briefing into a managed `<!-- GENOUK:MEMORY -->` block in
+   * CLAUDE.md. This is the text-file path to cross-chat memory: Claude Code (and similar
+   * agents) auto-load CLAUDE.md every session, so the next chat sees prior decisions and open
+   * threads with zero tool calls — no dependence on the agent remembering to call recall_context.
+   *
+   * Only the fenced block is touched; everything else in CLAUDE.md is preserved. If the file
+   * doesn't exist yet it's created with just the block. Best-effort: never throws.
+   */
+  syncMemoryFile(): void {
+    const repoRoot = this.repoRoot();
+    if (!repoRoot) return;
+    try {
+      const block = `${MEMORY_START}\n${renderCarryover(repoRoot)}\n${MEMORY_END}`;
+      const file = this.claudeMdPath(repoRoot);
+
+      let existing = '';
+      try { existing = fs.readFileSync(file, 'utf8'); } catch { /* file may not exist yet */ }
+
+      let next: string;
+      const start = existing.indexOf(MEMORY_START);
+      const end = existing.indexOf(MEMORY_END);
+      if (start !== -1 && end !== -1 && end > start) {
+        // Replace the managed block in place, leaving the rest of the file untouched.
+        next = existing.slice(0, start) + block + existing.slice(end + MEMORY_END.length);
+      } else if (existing.trim()) {
+        // File exists but has no block yet — append it at the end.
+        next = existing.replace(/\s*$/, '') + `\n\n${block}\n`;
+      } else {
+        // No CLAUDE.md yet — create one carrying just the block.
+        next = `${block}\n`;
+      }
+
+      if (next !== existing) fs.writeFileSync(file, next, 'utf8');
+    } catch {
+      /* best-effort: carry-over also remains available via the genouk-memory MCP recall tool */
+    }
+  }
+
   /** Copy the .mcp.json snippet to the clipboard. */
   async copyConfig(): Promise<void> {
     const repoRoot = this.repoRoot();
@@ -140,9 +188,15 @@ export class MemoryService {
     if (repoRoot && id) deleteStoredDigest(repoRoot, id);
   }
 
-  /** Clear all stored digests for the active repo. */
+  /** Forget a single remembered fact by id (no-op if no repo is open). */
+  deleteFact(id: string): void {
+    const repoRoot = this.repoRoot();
+    if (repoRoot && id) deleteStoredFact(repoRoot, id);
+  }
+
+  /** Clear all stored digests AND facts for the active repo. */
   clearAll(): void {
     const repoRoot = this.repoRoot();
-    if (repoRoot) clearDigests(repoRoot);
+    if (repoRoot) { clearDigests(repoRoot); clearFacts(repoRoot); }
   }
 }

@@ -7,6 +7,7 @@ import { PlannerPanel } from './PlannerPanel';
 import { handleLinearSync } from './LinearService';
 import { getNonce } from './webviewHtml';
 import { getSecret } from './secrets';
+import { log } from './log';
 import { TourNavigator } from './sidebar/TourNavigator';
 import { MemoryService } from './sidebar/MemoryService';
 import { VibeMonitor } from './sidebar/VibeMonitor';
