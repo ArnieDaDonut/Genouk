@@ -113,28 +113,6 @@
           "default": "",
           "description": "Vultr inference model id (e.g. deepseek-ai/DeepSeek-V4-Flash). Leave blank to use the VULTR_MODEL env var or the built-in default."
         },
-        "genouk.groqApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Fallback Groq API key. Prefer the \"Genouk: Set API Key\" command, which stores it in the OS keychain instead of plaintext settings.",
-          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
-        },
-        "genouk.model": {
-          "type": "string",
-          "default": "llama-3.3-70b-versatile",
-          "description": "Groq model used for prompt and change review."
-        },
-        "genouk.geminiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Fallback Gemini API key (used when Groq is rate-limited). Prefer the \"Genouk: Set API Key\" command, which stores it securely.",
-          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
-        },
-        "genouk.geminiModel": {
-          "type": "string",
-          "default": "gemini-2.0-flash",
-          "description": "Gemini model used as the fallback (gemini-2.0-flash is free and fast)."
-        },
         "genouk.maxTokens": {
           "type": "number",
           "default": 4096,
@@ -186,7 +164,6 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
-    "groq-sdk": "^1.2.1",
     "jsonrepair": "^3.14.0",
     "lucide-react": "^0.360.0",
     "react": "^18.2.0",

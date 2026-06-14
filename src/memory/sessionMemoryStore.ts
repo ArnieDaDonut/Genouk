@@ -219,6 +219,62 @@ export function renderCarryover(repoPath: string, limit = 5): string {
   return lines.join('\n');
 }
 
+/** Markers fencing the auto-managed carry-over block inside CLAUDE.md. */
+export const MEMORY_BLOCK_START = '<!-- GENOUK:MEMORY:START -->';
+export const MEMORY_BLOCK_END = '<!-- GENOUK:MEMORY:END -->';
+
+/**
+ * Write the current carry-over briefing into a managed block in `<repo>/CLAUDE.md` so a fresh
+ * agent chat auto-loads it — the text-file path to cross-chat memory, with zero tool calls.
+ *
+ * Only the fenced block is rewritten; the rest of CLAUDE.md is preserved. The file is created
+ * with just the block if it doesn't exist. Pure Node (no `vscode`), so BOTH the extension host
+ * and the standalone MCP server can keep CLAUDE.md current — the server refreshes it the instant
+ * a session is saved. Best-effort: never throws.
+ */
+export function syncCarryoverFile(repoPath: string): void {
+  try {
+    const file = path.join(path.resolve(repoPath || '.'), 'CLAUDE.md');
+
+    let existing = '';
+    try { existing = fs.readFileSync(file, 'utf8'); } catch { /* file may not exist yet */ }
+
+    // Locate any existing managed block. Use lastIndexOf for the END marker so digest
+    // prose that merely mentions the markers can't fool the boundary detection.
+    const start = existing.indexOf(MEMORY_BLOCK_START);
+    const end = existing.lastIndexOf(MEMORY_BLOCK_END);
+    const hasBlock = start !== -1 && end !== -1 && end > start;
+    const before = hasBlock ? existing.slice(0, start) : '';
+    const after = hasBlock ? existing.slice(end + MEMORY_BLOCK_END.length) : '';
+
+    // Nothing remembered for this repo yet? Don't litter an empty "No past sessions"
+    // block into the project (this is what created stray CLAUDE.md files in unrelated
+    // folders). Strip any existing block; delete the file if our block was all it held.
+    const hasMemory = loadDigests(repoPath).length > 0 || loadFacts(repoPath).length > 0;
+    if (!hasMemory) {
+      if (!hasBlock) return; // no file, or no block — leave the repo untouched
+      const stripped = (before + after).replace(/\n{3,}/g, '\n\n').trim();
+      if (stripped) fs.writeFileSync(file, stripped + '\n', 'utf8');
+      else fs.rmSync(file, { force: true }); // file contained only our block
+      return;
+    }
+
+    const block = `${MEMORY_BLOCK_START}\n${renderCarryover(repoPath)}\n${MEMORY_BLOCK_END}`;
+    let next: string;
+    if (hasBlock) {
+      next = before + block + after;
+    } else if (existing.trim()) {
+      next = existing.replace(/\s*$/, '') + `\n\n${block}\n`;
+    } else {
+      next = `${block}\n`;
+    }
+
+    if (next !== existing) fs.writeFileSync(file, next, 'utf8');
+  } catch {
+    /* best-effort: carry-over also remains available via the MCP recall tool */
+  }
+}
+
 /** Keyword search across a repo's digests; ranks by number of term hits. */
 export function searchDigests(repoPath: string, query: string, limit = 8): SessionDigest[] {
   const terms = (query || '').toLowerCase().split(/\s+/).filter(Boolean);

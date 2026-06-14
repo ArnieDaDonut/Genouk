@@ -128,16 +128,20 @@ export interface Fact {
   text: string;
 }
 
-/** Everything the Memory tab needs: stored digests + how to wire the MCP server up. */
+/** Everything the Memory tab needs: stored digests, remembered facts, and carry-over status. */
 export interface MemoryData {
   digests: SessionDigest[];
   facts: Fact[];
-  /** Pretty-printed .mcp.json snippet the user can copy into their agent. */
+  /** Pretty-printed .mcp.json snippet the user can copy into their agent (for the save side). */
   mcpConfig: string;
   /** Absolute path where Genouk writes .mcp.json (the repo root), or null if no repo. */
   mcpConfigPath: string | null;
   /** True once a genouk-memory entry exists in the repo's .mcp.json. */
   configWritten: boolean;
+  /** Absolute path of the CLAUDE.md that carries the auto-loaded memory block, or null. */
+  memoryFilePath: string | null;
+  /** True when the managed carry-over block is present in CLAUDE.md (recall is wired up). */
+  memoryFileWritten: boolean;
   /** Short label for the active repo (basename), or null if no folder is open. */
   repoLabel: string | null;
 }

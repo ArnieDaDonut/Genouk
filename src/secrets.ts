@@ -13,8 +13,6 @@ let storage: vscode.SecretStorage | undefined;
 /** The secret-bearing keys Genouk manages: a SecretStorage id + its legacy setting. */
 export const SECRET_KEYS = {
   vultr: { secret: 'genouk.vultrApiKey', setting: 'vultrApiKey', env: 'VULTR_API_KEY', label: 'Vultr API key' },
-  groq: { secret: 'genouk.groqApiKey', setting: 'groqApiKey', env: 'GROQ_API_KEY', label: 'Groq API key' },
-  gemini: { secret: 'genouk.geminiApiKey', setting: 'geminiApiKey', env: 'GEMINI_API_KEY', label: 'Gemini API key' },
   linear: { secret: 'genouk.linearApiKey', setting: 'linearApiKey', env: undefined, label: 'Linear API key' },
 } as const;
 

@@ -29,6 +29,7 @@ import {
   loadFacts,
   saveFact,
   deleteFact,
+  syncCarryoverFile,
 } from './sessionMemoryStore';
 
 const REPO = process.env.GENOUK_REPO || process.cwd();
@@ -128,6 +129,9 @@ server.registerTool(
   },
   async ({ title, summary, decisions, files, openThreads, resolvedThreads }) => {
     const saved = saveDigest(REPO, { title, summary, decisions, files, openThreads, resolvedThreads });
+    // Refresh the CLAUDE.md carry-over block so the next chat auto-loads this digest as plain
+    // text — no dependence on that chat remembering to call recall_context.
+    syncCarryoverFile(REPO);
     const stillOpen = aggregateOpenThreads(REPO).length;
     return { content: [{ type: 'text', text: `Saved session "${saved.title}" (${saved.id}). ${stillOpen} thread${stillOpen === 1 ? '' : 's'} still open project-wide. Future chats can recall it with recall_context.` }] };
   },
@@ -154,6 +158,7 @@ server.registerTool(
   async (patch) => {
     const updated = updateLatestDigest(REPO, patch);
     if (!updated) return { content: [{ type: 'text', text: 'Nothing to update — no digest saved yet. Use save_context first.' }] };
+    syncCarryoverFile(REPO);
     return { content: [{ type: 'text', text: `Updated session "${updated.title}" (${updated.id}).` }] };
   },
 );
@@ -187,6 +192,7 @@ server.registerTool(
   },
   async ({ fact }) => {
     const saved = saveFact(REPO, fact);
+    syncCarryoverFile(REPO);
     return { content: [{ type: 'text', text: `Remembered: "${saved.text}". It will appear in recall_context for every future chat in this project.` }] };
   },
 );
@@ -200,6 +206,7 @@ server.registerTool(
   },
   async ({ id }) => {
     const removed = deleteFact(REPO, id);
+    if (removed) syncCarryoverFile(REPO);
     return { content: [{ type: 'text', text: removed ? `Forgot fact ${id}.` : `No fact with id ${id}.` }] };
   },
 );

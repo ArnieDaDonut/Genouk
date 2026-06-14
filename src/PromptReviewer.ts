@@ -57,7 +57,7 @@ Expand it into a production-grade prompt the developer can paste and run. The re
 - State an explicit, structured output format (e.g. "return the full file", "return a unified diff", "respond with sections X/Y/Z").
 - Give step-by-step expectations or a checklist when the task has multiple parts.
 - End with verifiable success criteria (how the developer will know the output is correct).
-Favor completeness and precision over brevity — it is fine for the rewrite to be noticeably longer than the original if that detail removes ambiguity. Only fold in assumptions you are confident about; leave genuinely optional choices for the suggestions list below.
+Be precise but tight: include every constraint that removes ambiguity, but say each thing once and cut filler — aim for a focused prompt, not a long one. Only fold in assumptions you are confident about; leave genuinely optional choices for the suggestions list below.
 
 "suggestions" is a list of 2-5 OPTIONAL, high-value ideas the developer might want to act on. These fall into TWO kinds, and you may mix them:
 1. PROMPT additions you deliberately did NOT bake into the rewrite (because they require a decision only the developer can make), phrased as an invitation, e.g. "Consider naming the exact target file so the model doesn't guess", "If you have a test framework, ask for tests too", "Add an example of the desired output shape".
@@ -162,7 +162,12 @@ export class PromptReviewer {
     const ctx = repoContext ?? (await this.repoContext());
     const userContent = `REPOSITORY CONTEXT (use it to infer intent; state assumptions briefly):\n${ctx}\n\nPROMPT TO REWRITE:\n${prompt}`;
 
-    const resultText = await ai.generateContent(userContent, REWRITE_SYSTEM);
+    // maxTokens caps the longest call in the whole feature — paired with the "concise"
+    // instruction in REWRITE_SYSTEM, it keeps the rewrite snappy on Vultr's reasoning
+    // model without truncating a real answer (parseJson also repairs a cut-off object).
+    const resultText = await ai.generateContent(userContent, REWRITE_SYSTEM, {
+      maxTokens: 2000,
+    });
 
     try {
       const parsed = parseJson(resultText);

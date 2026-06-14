@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { getSecret } from './secrets';
@@ -16,8 +15,6 @@ export interface GenerateOptions {
   model?: string;
 }
 
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_VULTR_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
 const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
@@ -36,11 +33,8 @@ interface ResolvedOptions {
 }
 
 /**
- * Single entry point for all model calls. It keeps an ordered list of
- * providers and falls through to the next one whenever a call fails (rate
- * limits, outages, missing keys). Order: Vultr (if configured) → Groq →
- * Google Gemini. Callers are unchanged — they still call
- * `getInstance().generateContent(...)`.
+ * Single entry point for all model calls. Genouk runs on Vultr Serverless
+ * Inference. Callers go through `getInstance().generateContent(...)`.
  */
 export class AIProvider {
   private static instance: AIProvider;
@@ -55,9 +49,9 @@ export class AIProvider {
   }
 
   /**
-   * Providers to try, in order, given the keys currently configured. Keys are
-   * resolved from SecretStorage (then legacy settings, then env) on each call so
-   * a freshly-set key is picked up immediately with no restart.
+   * The configured provider (Vultr), or an empty list if no key is set. The key is
+   * resolved from SecretStorage (then legacy settings, then env) on each call so a
+   * freshly-set key is picked up immediately with no restart.
    */
   private async providers(): Promise<Provider[]> {
     const config = vscode.workspace.getConfiguration('genouk');
@@ -71,41 +65,6 @@ export class AIProvider {
         name: 'Vultr',
         generate: (userContent, systemContent, opts) =>
           callVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
-      });
-    }
-
-    const groqKey = await getSecret('groq');
-    if (groqKey) {
-      // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
-      // the Retry-After header — bumped from the default 2 so a brief rate-limit
-      // spike self-heals before we fall through to Gemini.
-      const groq = new Groq({ apiKey: groqKey, maxRetries: 4 });
-      const groqModel = config.get<string>('model') || DEFAULT_MODEL;
-      list.push({
-        name: 'Groq',
-        generate: async (userContent, systemContent, opts) => {
-          const messages: { role: 'system' | 'user'; content: string }[] = [];
-          if (systemContent) messages.push({ role: 'system', content: systemContent });
-          messages.push({ role: 'user', content: userContent });
-          const completion = await groq.chat.completions.create({
-            model: opts.model ?? groqModel,
-            messages,
-            max_tokens: opts.maxTokens,
-            temperature: opts.temperature,
-          });
-          return completion.choices[0]?.message?.content ?? '';
-        },
-      });
-    }
-
-    const geminiKey = await getSecret('gemini');
-    if (geminiKey) {
-      const key = geminiKey;
-      const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
-      list.push({
-        name: 'Gemini',
-        generate: (userContent, systemContent, opts) =>
-          callGemini(key, opts.model ?? geminiModel, userContent, systemContent, opts),
       });
     }
 
@@ -132,12 +91,10 @@ export class AIProvider {
     const providers = await this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a Vultr, Groq, or Gemini key.',
+        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a Vultr key.',
       );
     }
 
-    // Collect every provider's failure so the surfaced error explains the whole
-    // fallback chain, not just the last hop (e.g. "Groq failed AND Gemini failed").
     const failures: string[] = [];
     for (const provider of providers) {
       try {
@@ -210,42 +167,4 @@ async function callVultr(
   };
   const msg = data.choices?.[0]?.message;
   return msg?.content ?? msg?.reasoning ?? '';
-}
-
-/**
- * Call the Gemini REST API directly via fetch. We deliberately avoid the
- * `@google/genai` SDK: it pulls in Google's auth stack, websockets, and stream
- * polyfills (~1.5MB bundled) for what is a single JSON POST. Node 18+ (our
- * target) ships a global `fetch`.
- */
-async function callGemini(
-  apiKey: string,
-  model: string,
-  userContent: string,
-  systemContent: string | undefined,
-  opts: ResolvedOptions,
-): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body: Record<string, unknown> = {
-    contents: [{ parts: [{ text: userContent }] }],
-    generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
-  };
-  if (systemContent) {
-    body.system_instruction = { parts: [{ text: systemContent }] };
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
 }
