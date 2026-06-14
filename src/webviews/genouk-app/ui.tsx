@@ -91,12 +91,14 @@ export function GhostButton({
   children,
   onClick,
   active,
+  disabled,
   title,
   style,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
   title?: string;
   style?: React.CSSProperties;
 }) {
@@ -104,6 +106,7 @@ export function GhostButton({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={title}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -111,14 +114,15 @@ export function GhostButton({
         display: 'inline-flex',
         alignItems: 'center',
         gap: t.space.xs,
-        background: hover || active ? t.color.surfaceHover : 'transparent',
-        color: active ? t.color.accent : t.color.fg,
-        border: `1px solid ${t.color.border}`,
+        background: disabled ? 'transparent' : hover || active ? t.color.surfaceHover : 'transparent',
+        color: disabled ? t.color.muted : active ? t.color.accent : t.color.fg,
+        border: `1px solid ${disabled ? t.color.border : t.color.border}`,
         borderRadius: t.radius.sm,
         padding: '4px 8px',
         fontSize: t.font.size.sm,
         fontFamily: t.font.ui,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
         transition: `background ${t.motion.fast}s ease`,
         ...style,
       }}

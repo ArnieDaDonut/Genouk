@@ -4,8 +4,21 @@
   "description": "Genouk AI Assistant for prompt engineering and review",
   "version": "0.0.1",
   "publisher": "genouk-dev",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ArnieDaDonut/Genouk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ArnieDaDonut/Genouk/issues"
+  },
+  "homepage": "https://github.com/ArnieDaDonut/Genouk#readme",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
   },
   "categories": [
     "Other",
@@ -16,7 +29,10 @@
     "genouk",
     "AI",
     "prompt",
-    "review"
+    "review",
+    "assistant",
+    "mascot",
+    "linear"
   ],
   "activationEvents": [
     "onStartupFinished"

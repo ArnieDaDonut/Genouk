@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { log } from '../log';
 
 /**
  * Translates editor state into the webview's "vibe": a 0-100 health score from
@@ -22,6 +23,20 @@ export class VibeMonitor {
           this.updateScore();
         }
       }),
+    );
+
+    // Shell-integration (VS Code >= 1.93) tells us when a terminal command finishes
+    // and its exit code. Guarded so older VS Code versions still load.
+    const onShellEnd = (vscode.window as any).onDidEndTerminalShellExecution;
+    if (typeof onShellEnd === 'function') {
+      context.subscriptions.push(
+        onShellEnd((e: any) => this.handleShellEnd(e)),
+      );
+    }
+
+    // The Run/Debug (F5) button doesn't use the terminal — catch it separately.
+    context.subscriptions.push(
+      vscode.debug.onDidTerminateDebugSession(() => this.handleDebugEnd()),
     );
   }
 
@@ -88,5 +103,34 @@ export class VibeMonitor {
         .toString();
     }
     return uris;
+  }
+
+  // Commands worth a sound: building OR running code. Trivial shell noise
+  // (cd/ls/git/echo…) deliberately doesn't match.
+  private static readonly RUN_CMD_RE =
+    /\b(tsc|build|compile|bundle|webpack|vite|esbuild|rollup|make|cmake|mvn|gradle)\b/i;
+  private static readonly RUN_PROG_RE =
+    /\b(node|nodemon|ts-node|tsx|deno|bun|python3?|py|ruby|rails|java|dotnet|cargo|go|php|pytest|jest|vitest|mocha)\b|npm\s+(run\s+\S+|start|test|build)|yarn\s+\S+|pnpm\s+\S+/i;
+
+  /** Terminal command finished (shell integration) — sound build/run successes/failures. */
+  private handleShellEnd(e: any) {
+    const cmd: string = e?.execution?.commandLine?.value ?? '';
+    if (!cmd) return;
+    log(`Shell command finished (exit ${e.exitCode}): ${cmd}`);
+    const relevant = VibeMonitor.RUN_CMD_RE.test(cmd) || VibeMonitor.RUN_PROG_RE.test(cmd);
+    if (!relevant) return;
+    // exitCode can be undefined if the shell couldn't report it; treat that as success.
+    const failed = typeof e.exitCode === 'number' && e.exitCode !== 0;
+    this.post({ type: 'playSFX', value: failed ? 'compile-error' : 'compile-success' });
+  }
+
+  /**
+   * The Run/Debug (F5) button launches a debug session, which never touches the
+   * terminal — so we listen for it ending. The debug API doesn't reliably expose
+   * an exit code, so this just plays the "good" cue to mark "your run finished".
+   */
+  private handleDebugEnd() {
+    log('Debug session ended.');
+    this.post({ type: 'playSFX', value: 'compile-success' });
   }
 }

@@ -170,6 +170,55 @@ export function aggregateOpenThreads(repoPath: string): string[] {
   return open;
 }
 
+/**
+ * Render the full carry-over briefing as plain Markdown — facts, where the last session left
+ * off, threads still open across every past session, and the most recent digests in detail.
+ *
+ * This is the text-file path to cross-chat memory: instead of relying on an agent to call an
+ * MCP tool at the start of a chat, the extension drops this Markdown into a spot the agent
+ * auto-loads (a managed block in the repo's CLAUDE.md), so carry-over happens with zero tool
+ * calls and can't be skipped. Pure string-building, no `vscode` and no disk writes here.
+ */
+export function renderCarryover(repoPath: string, limit = 5): string {
+  const facts = loadFacts(repoPath);
+  const all = loadDigests(repoPath); // newest first
+
+  const lines: string[] = ['## ⏳ Cross-chat memory — carried over from past chats', ''];
+  lines.push('_Genouk keeps this section in sync from past Genouk chat digests — don\'t edit it by hand._', '');
+
+  if (facts.length) {
+    lines.push('**📌 Remembered facts:**', ...facts.map((f) => `- ${f.text}`), '');
+  }
+
+  if (all.length === 0) {
+    lines.push('No past sessions recorded yet. When you finish a chunk of work, call `save_context` (genouk-memory MCP) so the next chat starts here.');
+    return lines.join('\n');
+  }
+
+  const last = all[0];
+  lines.push(`**Last session:** ${last.title} (${new Date(last.ts).toLocaleString()})`);
+
+  const open = aggregateOpenThreads(repoPath);
+  if (open.length) {
+    lines.push('', `**Still open across past sessions (${open.length}) — start here:**`, ...open.map((x) => `- ${x}`));
+  } else {
+    lines.push('', '**✅ No open threads carried over** — past sessions closed cleanly.');
+  }
+
+  const recent = recentDigests(repoPath, limit);
+  lines.push('', `### Recent sessions (${recent.length})`, '');
+  for (const d of recent) {
+    lines.push(`#### ${d.title}`, `_${new Date(d.ts).toLocaleString()}_`, '', d.summary);
+    if (d.decisions.length) lines.push('', '**Decisions:**', ...d.decisions.map((x) => `- ${x}`));
+    if (d.files.length) lines.push('', '**Files touched:**', ...d.files.map((x) => `- ${x}`));
+    if (d.openThreads.length) lines.push('', '**Open threads:**', ...d.openThreads.map((x) => `- ${x}`));
+    lines.push('');
+  }
+
+  lines.push('> When you finish a meaningful chunk of work, call `save_context` (genouk-memory MCP) so the next chat carries it forward.');
+  return lines.join('\n');
+}
+
 /** Keyword search across a repo's digests; ranks by number of term hits. */
 export function searchDigests(repoPath: string, query: string, limit = 8): SessionDigest[] {
   const terms = (query || '').toLowerCase().split(/\s+/).filter(Boolean);

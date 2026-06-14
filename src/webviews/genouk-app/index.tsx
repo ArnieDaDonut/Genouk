@@ -1,33 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Square, Brain, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Palette, Square, Brain, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
-import { PromptReviewResult, SessionPlan, CodebaseTour, VibeState, MemoryData } from './types';
+import { PromptReviewResult, SessionPlan, CodebaseTour, Personalization, DEFAULT_PERSONALIZATION, VibeState, MemoryData } from './types';
 import { PromptTab } from './PromptTab';
 import { ChangesTab } from './ChangesTab';
 import { SessionTab } from './SessionTab';
 import { TourTab } from './TourTab';
+import { PersonalizationTab } from './PersonalizationTab';
 import { AudioTab } from './AudioTab';
 import { MemoryTab } from './MemoryTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
-import { ensureAudio, setMasterVolume, playForScore, playTier, MusicCue, MusicTier } from './musicEngine';
+import { ensureAudio, setMasterVolume, playForScore, playTier, playSfx, isAudioStarted, MusicCue, MusicTier } from './musicEngine';
 import { PlannerView } from './PlannerView';
+import { BREAK_NUDGES } from './quips';
+import { nextTaskTitle } from './taskUtils';
 
-const BREAK_NUDGES = [
-  'Break time! Stand up and stretch. 🧘',
-  "You've earned a breather — hydrate. 💧",
-  'Rest your eyes: look 20ft away for 20 seconds. 👀',
-  'Step away for a moment, the code will wait. ☕',
-  'Roll your shoulders and breathe. Back in a bit. 🌿',
-];
+
 
 declare const window: any;
 
-type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'memory' | 'audio';
+type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'memory' | 'audio' | 'personalize';
 
 const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'prompts', label: 'Prompts', Icon: Sparkles },
@@ -35,6 +32,7 @@ const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'tour', label: 'Tour', Icon: Compass },
   { id: 'changes', label: 'Changes', Icon: GitBranch },
   { id: 'memory', label: 'Memory', Icon: Brain },
+  { id: 'personalize', label: 'You', Icon: Palette },
   { id: 'audio', label: 'Sounds', Icon: Volume2 },
 ];
 
@@ -85,6 +83,11 @@ const App = () => {
   const [activeStop, setActiveStop] = useState<number | null>(null);
   const [walkSignal, setWalkSignal] = useState(0);
 
+  // Personalization (accessory + selectable SFX)
+  const [personalization, setPersonalization] = useState<Personalization>(DEFAULT_PERSONALIZATION);
+  const personalizationRef = useRef<Personalization>(DEFAULT_PERSONALIZATION);
+  useEffect(() => { personalizationRef.current = personalization; }, [personalization]);
+
   // Mascot speech (focus-timer reminders + task nudges)
   const [mascotSay, setMascotSay] = useState<MascotMessage | null>(null);
   const sayNonce = useRef(0);
@@ -96,21 +99,11 @@ const App = () => {
     setMascotSay({ text, nonce: sayNonce.current });
   };
 
-  /** First in-progress task, else first todo, else null. */
-  const nextTaskTitle = (): string | null => {
-    const plan = sessionPlanRef.current;
-    if (!plan) return null;
-    const inProgress = plan.tasks.find((x) => x.status === 'in_progress');
-    if (inProgress) return inProgress.title;
-    const todo = plan.tasks.find((x) => x.status === 'todo');
-    return todo ? todo.title : null;
-  };
-
   const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
     if (next === 'break') {
       speak(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
     } else {
-      const task = nextTaskTitle();
+      const task = nextTaskTitle(sessionPlanRef.current);
       speak(task ? `Break's over. Next up: ${task}` : "Break's over — let's get back to it. 🚀");
     }
   };
@@ -121,7 +114,7 @@ const App = () => {
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = nextTaskTitle();
+      const task = nextTaskTitle(sessionPlanRef.current);
       speak(task ? `Focus time. Work on: ${task}` : "Focus time — let's go. 💪");
     }
   };
@@ -169,15 +162,37 @@ const App = () => {
           break;
         case 'playSFX': {
           setSfx({ kind: message.value, nonce: Date.now() });
-          const url = audioUrisRef.current[message.value];
-          if (url && sfxAudioRef.current) {
-            sfxAudioRef.current.src = url;
-            sfxAudioRef.current.volume = volumeRef.current * (mutedRef.current ? 0 : 1);
-            sfxAudioRef.current.currentTime = 0;
-            sfxAudioRef.current.play().catch(() => {});
+          // The three personalizable events play the user's chosen synthesized
+          // SFX; everything else still uses its bundled mp3.
+          const sfxSlot: Record<string, keyof Personalization['sfx']> = {
+            'compile-success': 'goodCompile',
+            'compile-error': 'badCompile',
+            'notification': 'notification',
+          };
+          const slot = sfxSlot[message.value];
+          if (slot) {
+            const chosen = personalizationRef.current.sfx[slot];
+            ensureAudio().then(() => {
+              setMasterVolume(volumeRef.current, mutedRef.current);
+              playSfx(chosen as any);
+              vscode.postMessage({ type: 'log', value: `played SFX '${chosen}' for ${message.value} (audioStarted=${isAudioStarted()}, muted=${mutedRef.current}, vol=${volumeRef.current})` });
+            }).catch((e: any) => {
+              vscode.postMessage({ type: 'log', value: `SFX failed for ${message.value}: ${e}` });
+            });
+          } else {
+            const url = audioUrisRef.current[message.value];
+            if (url && sfxAudioRef.current) {
+              sfxAudioRef.current.src = url;
+              sfxAudioRef.current.volume = volumeRef.current * (mutedRef.current ? 0 : 1);
+              sfxAudioRef.current.currentTime = 0;
+              sfxAudioRef.current.play().catch(() => {});
+            }
           }
           break;
         }
+        case 'personalization':
+          if (message.value) setPersonalization(message.value);
+          break;
         case 'sessionPlan':
           setSessionPlan(message.value);
           setSessionLoading(false);
@@ -239,10 +254,18 @@ const App = () => {
     window.addEventListener('message', handleMessage);
     backgroundAudioRef.current = new Audio();
     sfxAudioRef.current = new Audio();
+    // Web Audio starts suspended until a user gesture. Unlock it on the first
+    // click anywhere in the panel so event sounds work without hitting a preview.
+    const unlockAudioOnce = () => {
+      ensureAudio().then(() => setMasterVolume(volumeRef.current, mutedRef.current)).catch(() => {});
+    };
+    window.addEventListener('pointerdown', unlockAudioOnce, { once: true });
+
     vscode.postMessage({ type: 'getAudioUris' });
     vscode.postMessage({ type: 'getSessionPlan' });
     vscode.postMessage({ type: 'getTour' });
     vscode.postMessage({ type: 'getMemory' });
+    vscode.postMessage({ type: 'getPersonalization' });
 
     return () => {
       window.removeEventListener('message', handleMessage);
@@ -365,6 +388,19 @@ const App = () => {
   const handleCopyMcpConfig = () => vscode.postMessage({ type: 'copyMcpConfig' });
   const handleDeleteDigest = (id: string) => vscode.postMessage({ type: 'deleteDigest', value: id });
   const handleClearMemory = () => vscode.postMessage({ type: 'clearMemory' });
+
+  const handlePersonalizationChange = (p: Personalization) => {
+    setPersonalization(p);
+    vscode.postMessage({ type: 'savePersonalization', value: p });
+  };
+
+  // Preview a sound from the Personalization tab (button click = valid audio gesture).
+  const handlePreviewSfx = (name: string) => {
+    ensureAudio().then(() => {
+      setMasterVolume(volume, muted);
+      playSfx(name as any);
+    }).catch(() => {});
+  };
 
   const startLiveTour = () => {
     if (!tour || tour.stops.length === 0) return;
@@ -504,6 +540,7 @@ const App = () => {
         errand={errand}
         say={mascotSay}
         walkSignal={walkSignal}
+        accessory={personalization.accessory}
         tourPlaying={tourPlaying}
         onDoubleActivate={() => {
           if (tourPlaying) return;
@@ -638,6 +675,13 @@ const App = () => {
             onRefresh={refreshMemory}
             onDelete={handleDeleteDigest}
             onClear={handleClearMemory}
+          />
+        )}
+        {activeTab === 'personalize' && (
+          <PersonalizationTab
+            personalization={personalization}
+            onChange={handlePersonalizationChange}
+            onPreviewSfx={handlePreviewSfx}
           />
         )}
         {activeTab === 'audio' && (

@@ -1,21 +1,8 @@
 import { AIProvider } from './AIProvider';
+import { SessionTask, SessionPlan } from './shared/types';
 
-export interface SessionTask {
-  id: string;
-  title: string;
-  description: string;
-  estimatedMinutes: number;
-  difficulty: 'easy' | 'medium' | 'hard';
-  status: 'todo' | 'in_progress' | 'completed';
-  linearIssueId?: string;
-  linearIssueUrl?: string;
-}
+export type { SessionTask, SessionPlan };
 
-export interface SessionPlan {
-  goal: string;
-  estimatedDuration: string;
-  tasks: SessionTask[];
-}
 
 export class SessionPlanner {
   async generateSessionPlan(goal: string): Promise<SessionPlan> {

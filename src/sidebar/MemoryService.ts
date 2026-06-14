@@ -5,12 +5,19 @@ import {
   recentDigests,
   deleteDigest as deleteStoredDigest,
   clearDigests,
+  renderCarryover,
 } from '../memory/sessionMemoryStore';
 
+/** Markers fencing Genouk's auto-managed carry-over block inside CLAUDE.md. */
+const MEMORY_START = '<!-- GENOUK:MEMORY:START -->';
+const MEMORY_END = '<!-- GENOUK:MEMORY:END -->';
+
 /**
- * Everything the Memory tab needs: reading cross-chat digests and wiring the
- * bundled genouk-memory MCP server into the repo's `.mcp.json`. Cohesive enough
- * to live on its own rather than bloating the sidebar message router.
+ * Everything the Memory tab needs: reading cross-chat digests, wiring the bundled
+ * genouk-memory MCP server into the repo's `.mcp.json`, AND syncing the carry-over
+ * briefing into a managed block in CLAUDE.md so a fresh agent chat auto-loads it
+ * without having to call any MCP tool. Cohesive enough to live on its own rather
+ * than bloating the sidebar message router.
  */
 export class MemoryService {
   constructor(private readonly extensionUri: vscode.Uri) {}

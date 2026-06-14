@@ -21,9 +21,9 @@ export interface TourStop {
 }
 
 export interface CodebaseTour {
-  /** What the program does. Echoes the user's description, or Jarvis's inference. */
+  /** What the program does. Echoes the user's description, or Genouk's inference. */
   summary: string;
-  /** True when the user gave no description and Jarvis inferred the purpose. */
+  /** True when the user gave no description and Genouk inferred the purpose. */
   inferred: boolean;
   /** High-level architecture narrative: layers, data flow, entry points. */
   architecture: string;

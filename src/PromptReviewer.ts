@@ -1,19 +1,9 @@
 import { jsonrepair } from 'jsonrepair';
 import { AIProvider } from './AIProvider';
 import { gatherRepoContext } from './RepoContext';
+import { PromptReviewResult } from './shared/types';
 
-export interface PromptReviewResult {
-  isFinished: boolean;
-  score: number; // 0-100
-  feedback: string;
-  improvedPrompt: string;
-  tokenIssues: string[]; // specific weaknesses found
-  suggestions: string[]; // optional, high-value additions the developer might consider
-  estimatedOriginalTokens: number;
-  estimatedImprovedTokens: number;
-  /** True while the heavy rewrite is still being generated (phase 2). */
-  rewriting?: boolean;
-}
+export type { PromptReviewResult };
 
 /** Just the rewrite half of a review — produced by the slower phase-2 call. */
 export interface PromptRewriteResult {

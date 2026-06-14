@@ -3,6 +3,7 @@ import { motion, AnimatePresence, useReducedMotion, useAnimationControls } from 
 import { t } from './theme';
 import { PromptReviewResult, SessionPlan, VibeState } from './types';
 import { quip, bankForScore, QuipBank } from './quips';
+import { findAccessory, accessoryImageUrl } from './accessories';
 
 declare const window: any;
 
@@ -25,6 +26,8 @@ interface MascotProps {
   say?: MascotMessage | null;
   /** Bump to make Genouk walk/stroll across the panel (live-tour steps). */
   walkSignal?: number;
+  /** Accessory id (accessories.ts) worn over the sprite. */
+  accessory?: string;
   /** Double-click shortcut into the prompt review. */
   onDoubleActivate?: () => void;
   /** True while codebase tour is actively running. */
@@ -85,6 +88,24 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
 
 const completed = (status: string) => status === 'completed';
 
+// Make an overlaid cosmetic read as part of the character instead of a floating
+// sticker: a thin dark outline (matching the robot's dark recesses) gives it
+// weight, and a short downward shadow seats it onto the head/body it sits on.
+// Applied as a CSS filter so it's crisp at display size regardless of the PNG's
+// source resolution.
+const ACCESSORY_OUTLINE = '#13171e';
+const ACCESSORY_FILTER = [
+  `drop-shadow(1px 0 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px 0 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(1px 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(1px -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 3px 2px rgba(0,0,0,0.5))`,
+].join(' ');
+
 const vibeBank = (vibe: string): QuipBank => {
   if (vibe === 'chill' || vibe === 'fire' || vibe === 'worried' || vibe === 'chaos') {
     return vibe;
@@ -96,7 +117,7 @@ const pressButton = (button: HTMLElement) => {
   button.click();
 };
 
-export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, onDoubleActivate, tourPlaying }) => {
+export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeReview, sessionPlan, sfx, errand, say, walkSignal, accessory, onDoubleActivate, tourPlaying }) => {
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
   const tourSpriteUrl = window.PET_TOUR_SPRITE || '';
@@ -112,6 +133,11 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   // Occasional in-place flourish — a dance or a wave. Stays centered (no walking
   // around the panel); just a little personality every so often.
   const [flair, setFlair] = useState<'none' | 'dance' | 'wave'>('none');
+
+  // True once the worn accessory's cut-out PNG fails to load, so we fall back to
+  // its emoji. Reset whenever the chosen accessory changes.
+  const [accImgBroken, setAccImgBroken] = useState(false);
+  useEffect(() => { setAccImgBroken(false); }, [accessory]);
 
   // The "courier" — a separate overlay sprite that runs across the panel to press
   // a button for you, then scurries back off the left edge.
@@ -487,6 +513,15 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     };
   }
 
+  const worn = findAccessory(accessory ?? 'none');
+  const wornImg = accessoryImageUrl(worn);
+  const wornLeft = worn.left ?? '48%';
+  // Keep the accessory upright (counter-mirror) while the walk sheet is flipped.
+  const accessoryTransform =
+    `translateX(-50%)` +
+    (worn.rotate ? ` rotate(${worn.rotate}deg)` : '') +
+    (phase === 'walking' ? ` scaleX(${facingFlip})` : '');
+
   const sprite = (
     <div
       onClick={handleClick}
@@ -495,6 +530,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
       title={phase === 'arrived' && !tourPlaying ? 'Click for a tip · double-click to review your prompt' : undefined}
       aria-hidden="true"
       style={{
+        position: 'relative',
         width: displayWidth,
         height: displayHeight,
         flexShrink: 0,
@@ -510,7 +546,48 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
         // Mirror the walk sprite so it faces the way it's moving.
         transform: phase === 'walking' ? `scaleX(${facingFlip})` : undefined,
       }}
-    />
+    >
+      {worn.id !== 'none' && (
+        wornImg && !accImgBroken ? (
+          <img
+            src={wornImg}
+            alt=""
+            aria-hidden="true"
+            onError={() => setAccImgBroken(true)}
+            style={{
+              position: 'absolute',
+              top: worn.top,
+              left: wornLeft,
+              width: worn.width,
+              height: 'auto',
+              transform: accessoryTransform,
+              transformOrigin: 'center top',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              // Cosmetics are detailed art, not pixel-art — render them smoothly.
+              imageRendering: 'auto',
+              // Outline + contact shadow so it reads as worn, not stuck on top.
+              filter: ACCESSORY_FILTER,
+            }}
+          />
+        ) : worn.emoji ? (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: worn.top,
+              left: wornLeft,
+              transform: accessoryTransform,
+              fontSize: worn.size,
+              lineHeight: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            {worn.emoji}
+          </span>
+        ) : null
+      )}
+    </div>
   );
 
   return (

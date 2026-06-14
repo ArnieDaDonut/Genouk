@@ -70,3 +70,12 @@ export function bankForScore(score: number): 'cheer' | 'nod' | 'slump' {
   if (score >= 50) return 'nod';
   return 'slump';
 }
+
+/** Focus timer break-time nudges. */
+export const BREAK_NUDGES = [
+  'Break time! Stand up and stretch. 🧘',
+  "You've earned a breather — hydrate. 💧",
+  'Rest your eyes: look 20ft away for 20 seconds. 👀',
+  'Step away for a moment, the code will wait. ☕',
+  'Roll your shoulders and breathe. Back in a bit. 🌿',
+];

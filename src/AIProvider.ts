@@ -3,6 +3,7 @@ import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { getSecret } from './secrets';
+import { log } from './log';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
@@ -18,6 +19,7 @@ export interface GenerateOptions {
 const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
 const DEFAULT_VULTR_MODEL = 'deepseek-ai/DeepSeek-V4-Flash';
+const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
 
@@ -67,7 +69,8 @@ export class AIProvider {
       const vultrModel = config.get<string>('vultrModel') || process.env.VULTR_MODEL || DEFAULT_VULTR_MODEL;
       list.push({
         name: 'Vultr',
-        generate: (userContent, systemContent, opts) => callVultr(key, vultrModel, userContent, systemContent, opts),
+        generate: (userContent, systemContent, opts) =>
+          callVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
       });
     }
 
@@ -101,7 +104,8 @@ export class AIProvider {
       const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
       list.push({
         name: 'Gemini',
-        generate: (userContent, systemContent, opts) => callGemini(key, geminiModel, userContent, systemContent, opts),
+        generate: (userContent, systemContent, opts) =>
+          callGemini(key, opts.model ?? geminiModel, userContent, systemContent, opts),
       });
     }
 
@@ -138,11 +142,17 @@ export class AIProvider {
     for (const provider of providers) {
       try {
         const text = await provider.generate(userContent, systemContent, opts);
-        if (text.trim()) return text;
+        if (text.trim()) {
+          log(`AI provider used: ${provider.name}`);
+          return text;
+        }
         failures.push(`${provider.name}: empty response`);
+        log(`${provider.name} returned an empty response.`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         failures.push(`${provider.name}: ${shorten(msg)}`);
+        // The banner shows a trimmed line; the output channel keeps the full text.
+        log(`${provider.name} FAILED (full error):\n${msg}`);
         console.warn(`[Genouk] ${provider.name} failed, trying next provider:`, err);
       }
     }
@@ -174,7 +184,7 @@ async function callVultr(
   if (systemContent) messages.push({ role: 'system', content: systemContent });
   messages.push({ role: 'user', content: userContent });
 
-  const res = await fetch('https://api.vultrinference.com/v1/chat/completions', {
+  const res = await fetch(`${VULTR_BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

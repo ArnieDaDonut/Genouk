@@ -74,3 +74,4 @@ export class ChangeReviewer {
     return ai.generateContent(userContent, SYSTEM_PROMPT);
   }
 }
+

@@ -4,7 +4,7 @@ import { ChangeReviewer } from './ChangeReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
-import { LinearService } from './LinearService';
+import { handleLinearSync } from './LinearService';
 import { getNonce } from './webviewHtml';
 import { getSecret } from './secrets';
 import { TourNavigator } from './sidebar/TourNavigator';
@@ -120,27 +120,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'syncToLinear': {
-          const apiKey = await getSecret('linear');
-          const teamId = vscode.workspace.getConfiguration('genouk').get<string>('linearTeamId');
-
-          if (!apiKey || !teamId) {
-            vscode.window.showErrorMessage('Set your Linear key via "Genouk: Set API Key" and configure genouk.linearTeamId in settings.');
-            this.post({ type: 'syncToLinearResult', value: { success: false } });
-            break;
-          }
-
-          const plan = this._store.get();
-          if (!plan) break;
-
-          try {
-            const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
-            await this._store.set(updatedPlan);
-            this.post({ type: 'syncToLinearResult', value: { success: true } });
-            vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
-          } catch (error: any) {
-            this.post({ type: 'error', value: error.message });
-            this.post({ type: 'syncToLinearResult', value: { success: false } });
-          }
+          await handleLinearSync(this._store, webviewView.webview);
           break;
         }
         case 'openPlanner': {
@@ -167,6 +147,18 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
         }
         case 'revealInFile': {
           await this.tour.revealInFile(data.value?.file, data.value?.symbol);
+          break;
+        }
+        case 'getPersonalization': {
+          webviewView.webview.postMessage({ type: 'personalization', value: this._context.globalState.get('personalization') ?? null });
+          break;
+        }
+        case 'savePersonalization': {
+          await this._context.globalState.update('personalization', data.value);
+          break;
+        }
+        case 'log': {
+          log(`[webview] ${data.value}`);
           break;
         }
         case 'setTourPlaying': {
@@ -213,8 +205,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       vscode.Uri.joinPath(this._extensionUri, 'dist', 'genoukApp.js')
     );
 
-    const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
-    const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
     const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
@@ -222,6 +212,8 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     // Base URI for the bundled instrument samples (trumpet, strings, etc.) that the
     // music engine loads via Tone.Sampler. Trailing slash so it can be used as a baseUrl.
     const samplesUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'samples'));
+    // Base URI for cosmetic cut-outs; the webview appends `/<file>.png` per accessory.
+    const accessoryBaseUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'accessories'));
 
     const nonce = getNonce();
 
@@ -236,15 +228,12 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       <body>
         <div id="root"></div>
         <script nonce="${nonce}">
-          window.PET_IMAGES = [
-            "${petUri}"
-          ];
-          window.PET_VIDEO = "${videoUri}";
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
           window.PET_TOUR_SPRITE = "${tourSpriteUri}";
           window.PET_DANCE_SPRITE = "${danceSpriteUri}";
           window.GENOUK_SAMPLES = "${samplesUri}/";
+          window.ACCESSORY_BASE = "${accessoryBaseUri}";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;
