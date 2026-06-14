@@ -23,6 +23,9 @@ import {
   recentDigests,
   saveDigest,
   searchDigests,
+  updateLatestDigest,
+  aggregateOpenThreads,
+  loadDigests,
 } from './sessionMemoryStore';
 
 const REPO = process.env.GENOUK_REPO || process.cwd();
@@ -42,6 +45,35 @@ function formatMany(digests: SessionDigest[], emptyMsg: string): string {
   return digests.map(formatDigest).join('\n\n---\n\n');
 }
 
+/**
+ * The full recall briefing. Leads with what's still open across every past session (so a
+ * fresh chat sees pending work immediately) and where the last session left off, THEN the
+ * recent digests in detail. This consolidated view is what makes carry-over actually useful.
+ */
+function buildRecall(limit: number): string {
+  const all = loadDigests(REPO);
+  if (all.length === 0) return 'No previous session memory for this project yet. This is a fresh start — call save_context before you finish so the next chat can pick up from here.';
+
+  const recent = recentDigests(REPO, limit);
+  const open = aggregateOpenThreads(REPO);
+  const last = all[0];
+  const when = new Date(last.ts).toLocaleString();
+
+  const head: string[] = [
+    `# Continuing this project — ${all.length} past session${all.length === 1 ? '' : 's'} on record`,
+    '',
+    `**Last session:** ${last.title} (${when})`,
+  ];
+  if (open.length) {
+    head.push('', `**⏳ Still open across past sessions (${open.length}) — start here:**`, ...open.map((x) => `- ${x}`));
+    head.push('', 'When you finish any of these, pass them to save_context/update_context as `resolvedThreads` so they stop resurfacing.');
+  } else {
+    head.push('', '**✅ No open threads carried over** — past sessions closed cleanly.');
+  }
+
+  return [head.join('\n'), '', '---', '', `## Recent session digests (${recent.length})`, '', formatMany(recent, '')].join('\n');
+}
+
 const server = new McpServer({ name: 'genouk-memory', version: '0.0.1' });
 
 server.registerTool(
@@ -51,12 +83,13 @@ server.registerTool(
     description:
       'Recall what previous chat sessions in THIS project accomplished — decisions made, ' +
       'files touched, and unresolved threads. Call this at the START of a new chat so you ' +
-      'continue where the last session left off instead of starting cold. Returns the most ' +
-      'recent session digests, newest first.',
-    inputSchema: { limit: z.number().int().positive().max(20).optional().describe('How many recent sessions to return (default 5).') },
+      'continue where the last session left off instead of starting cold. Leads with a ' +
+      'consolidated list of threads still open across all past sessions, then the most ' +
+      'recent session digests in detail.',
+    inputSchema: { limit: z.number().int().positive().max(20).optional().describe('How many recent session digests to show in detail (default 5).') },
   },
   async ({ limit }) => ({
-    content: [{ type: 'text', text: formatMany(recentDigests(REPO, limit ?? 5), 'No previous session memory for this project yet.') }],
+    content: [{ type: 'text', text: buildRecall(limit ?? 5) }],
   }),
 );
 
@@ -75,11 +108,38 @@ server.registerTool(
       decisions: z.array(z.string()).optional().describe('Concrete decisions made, each a short bullet.'),
       files: z.array(z.string()).optional().describe('Files created or meaningfully changed.'),
       openThreads: z.array(z.string()).optional().describe('Unresolved threads / next steps for the following session.'),
+      resolvedThreads: z.array(z.string()).optional().describe('Open threads from EARLIER sessions you closed out this session. Copy their text from recall_context so they stop resurfacing.'),
     },
   },
-  async ({ title, summary, decisions, files, openThreads }) => {
-    const saved = saveDigest(REPO, { title, summary, decisions, files, openThreads });
-    return { content: [{ type: 'text', text: `Saved session "${saved.title}" (${saved.id}). Future chats can recall it with recall_context.` }] };
+  async ({ title, summary, decisions, files, openThreads, resolvedThreads }) => {
+    const saved = saveDigest(REPO, { title, summary, decisions, files, openThreads, resolvedThreads });
+    const stillOpen = aggregateOpenThreads(REPO).length;
+    return { content: [{ type: 'text', text: `Saved session "${saved.title}" (${saved.id}). ${stillOpen} thread${stillOpen === 1 ? '' : 's'} still open project-wide. Future chats can recall it with recall_context.` }] };
+  },
+);
+
+server.registerTool(
+  'update_context',
+  {
+    title: 'Amend the current session digest',
+    description:
+      'Update the MOST RECENT session digest in place instead of creating a new one. Use this ' +
+      'when you already saved a digest this session and want to append new decisions, files, or ' +
+      'threads, or mark earlier threads resolved — it keeps one digest per session instead of ' +
+      'piling up near-duplicates. Array fields are merged and deduped.',
+    inputSchema: {
+      title: z.string().optional().describe('Replace the title (optional).'),
+      summary: z.string().optional().describe('Replace the summary (optional).'),
+      decisions: z.array(z.string()).optional().describe('Decisions to add (merged with existing).'),
+      files: z.array(z.string()).optional().describe('Files to add (merged with existing).'),
+      openThreads: z.array(z.string()).optional().describe('Open threads to add (merged with existing).'),
+      resolvedThreads: z.array(z.string()).optional().describe('Earlier-session threads now resolved.'),
+    },
+  },
+  async (patch) => {
+    const updated = updateLatestDigest(REPO, patch);
+    if (!updated) return { content: [{ type: 'text', text: 'Nothing to update — no digest saved yet. Use save_context first.' }] };
+    return { content: [{ type: 'text', text: `Updated session "${updated.title}" (${updated.id}).` }] };
   },
 );
 

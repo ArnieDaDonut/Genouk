@@ -31,6 +31,11 @@ export interface SessionDigest {
   files: string[];
   /** Unresolved threads / next steps the following session should pick up. */
   openThreads: string[];
+  /**
+   * Open threads from EARLIER sessions that this session closed out. Recorded so the
+   * cross-session "still open" rollup stops resurfacing work that's already done.
+   */
+  resolvedThreads?: string[];
 }
 
 /** Root directory for all stored digests. Override with GENOUK_HOME for tests. */
@@ -73,6 +78,15 @@ export interface SaveInput {
   decisions?: string[];
   files?: string[];
   openThreads?: string[];
+  /** Texts of prior-session open threads this session resolved (matched case-insensitively). */
+  resolvedThreads?: string[];
+}
+
+const clean = (xs?: string[]): string[] => (xs || []).map((s) => s.trim()).filter(Boolean);
+
+function writeAll(repoPath: string, all: SessionDigest[]): void {
+  fs.mkdirSync(memoryDir(), { recursive: true });
+  fs.writeFileSync(digestFile(repoPath), JSON.stringify(all, null, 2), 'utf8');
 }
 
 /** Append a new digest for a repo and return the stored record. */
@@ -82,17 +96,78 @@ export function saveDigest(repoPath: string, input: SaveInput): SessionDigest {
     ts: new Date().toISOString(),
     title: (input.title || 'Untitled session').trim(),
     summary: (input.summary || '').trim(),
-    decisions: (input.decisions || []).map((s) => s.trim()).filter(Boolean),
-    files: (input.files || []).map((s) => s.trim()).filter(Boolean),
-    openThreads: (input.openThreads || []).map((s) => s.trim()).filter(Boolean),
+    decisions: clean(input.decisions),
+    files: clean(input.files),
+    openThreads: clean(input.openThreads),
+    resolvedThreads: clean(input.resolvedThreads),
   };
 
   const all = loadDigests(repoPath);
   all.unshift(digest);
-
-  fs.mkdirSync(memoryDir(), { recursive: true });
-  fs.writeFileSync(digestFile(repoPath), JSON.stringify(all, null, 2), 'utf8');
+  writeAll(repoPath, all);
   return digest;
+}
+
+export interface UpdateInput {
+  title?: string;
+  summary?: string;
+  decisions?: string[];
+  files?: string[];
+  openThreads?: string[];
+  resolvedThreads?: string[];
+}
+
+/**
+ * Amend the most recent digest in place instead of spawning a new one. Array fields are
+ * MERGED (deduped), so an agent can append decisions/files/threads as a session progresses
+ * without piling up near-duplicate digests. Returns the updated record, or null if there's
+ * nothing to amend yet.
+ */
+export function updateLatestDigest(repoPath: string, patch: UpdateInput): SessionDigest | null {
+  const all = loadDigests(repoPath);
+  if (all.length === 0) return null;
+
+  const latest = all[0];
+  const mergeUnique = (prev: string[], next?: string[]) =>
+    Array.from(new Set([...prev, ...clean(next)]));
+
+  const updated: SessionDigest = {
+    ...latest,
+    ts: new Date().toISOString(),
+    title: patch.title?.trim() || latest.title,
+    summary: patch.summary?.trim() || latest.summary,
+    decisions: mergeUnique(latest.decisions, patch.decisions),
+    files: mergeUnique(latest.files, patch.files),
+    openThreads: mergeUnique(latest.openThreads, patch.openThreads),
+    resolvedThreads: mergeUnique(latest.resolvedThreads || [], patch.resolvedThreads),
+  };
+
+  all[0] = updated;
+  writeAll(repoPath, all);
+  return updated;
+}
+
+/**
+ * The threads still open across ALL of a repo's sessions, newest first and deduped, with
+ * anything later marked resolved removed. This is the heart of carry-over: instead of
+ * re-reading every digest, a new chat sees exactly what's still pending.
+ */
+export function aggregateOpenThreads(repoPath: string): string[] {
+  const all = loadDigests(repoPath); // newest first
+  const resolved = new Set<string>();
+  for (const d of all) for (const r of d.resolvedThreads || []) resolved.add(r.toLowerCase());
+
+  const seen = new Set<string>();
+  const open: string[] = [];
+  for (const d of all) {
+    for (const thread of d.openThreads) {
+      const key = thread.toLowerCase();
+      if (resolved.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      open.push(thread);
+    }
+  }
+  return open;
 }
 
 /** Keyword search across a repo's digests; ranks by number of term hits. */

@@ -61,13 +61,11 @@ export class MemoryService {
   }
 
   /**
-   * Write (or merge) the genouk-memory server into the repo's .mcp.json. Preserves any
-   * other servers already configured there rather than clobbering the file.
+   * Merge the genouk-memory server into the repo's .mcp.json without clobbering other servers.
+   * Returns true if the file was changed. Shared by the explicit "Write" button and the silent
+   * activation-time ensure.
    */
-  writeConfig(): void {
-    const repoRoot = this.repoRoot();
-    if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); return; }
-
+  private mergeConfig(repoRoot: string): boolean {
     const file = path.join(repoRoot, '.mcp.json');
     let config: any = {};
     try {
@@ -76,13 +74,48 @@ export class MemoryService {
       config = {};
     }
     if (!config.mcpServers || typeof config.mcpServers !== 'object') config.mcpServers = {};
-    config.mcpServers['genouk-memory'] = this.mcpServerEntry(repoRoot);
 
+    const desired = this.mcpServerEntry(repoRoot);
+    const existing = config.mcpServers['genouk-memory'];
+    // Already correct (same server path + repo) → nothing to do. Avoids needless writes/git noise.
+    if (existing && JSON.stringify(existing) === JSON.stringify(desired)) return false;
+
+    config.mcpServers['genouk-memory'] = desired;
+    fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    return true;
+  }
+
+  /**
+   * Write (or merge) the genouk-memory server into the repo's .mcp.json. Preserves any
+   * other servers already configured there rather than clobbering the file.
+   */
+  writeConfig(): void {
+    const repoRoot = this.repoRoot();
+    if (!repoRoot) { vscode.window.showWarningMessage('Genouk: open a folder to connect the memory server.'); return; }
     try {
-      fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
-      vscode.window.showInformationMessage('Genouk: wrote genouk-memory to .mcp.json. Restart your agent to pick it up.');
+      const changed = this.mergeConfig(repoRoot);
+      vscode.window.showInformationMessage(
+        changed
+          ? 'Genouk: wrote genouk-memory to .mcp.json. Restart your agent to pick it up.'
+          : 'Genouk: .mcp.json is already connected to genouk-memory.',
+      );
     } catch (err: any) {
       vscode.window.showErrorMessage(`Genouk: couldn't write .mcp.json — ${err?.message ?? err}`);
+    }
+  }
+
+  /**
+   * Ensure the repo's .mcp.json points at the bundled memory server, silently. Called on
+   * activation so memory is connected out of the box — without this, the tools never load
+   * into the agent and cross-chat recall simply never happens. Best-effort: never throws.
+   */
+  ensureConfig(): void {
+    const repoRoot = this.repoRoot();
+    if (!repoRoot) return;
+    try {
+      this.mergeConfig(repoRoot);
+    } catch {
+      /* best-effort: the Memory tab's "Write .mcp.json" button remains as a fallback */
     }
   }
 

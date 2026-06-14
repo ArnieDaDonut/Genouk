@@ -40,6 +40,10 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     this._context.subscriptions.push(
       this._store.onDidChange((plan) => this.post({ type: 'sessionPlan', value: plan })),
     );
+
+    // Connect cross-chat memory out of the box: without .mcp.json the agent never
+    // loads the recall/save tools, so memory silently does nothing.
+    this.memory.ensureConfig();
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView) {

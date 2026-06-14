@@ -61,6 +61,8 @@ export interface SessionDigest {
   decisions: string[];
   files: string[];
   openThreads: string[];
+  /** Earlier-session threads this session closed out (drives the "still open" rollup). */
+  resolvedThreads?: string[];
 }
 
 /** Everything the Memory tab needs: stored digests + how to wire the MCP server up. */

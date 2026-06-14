@@ -17,10 +17,16 @@ context across separate chats. **If that server's tools are available to you, us
    - `decisions`: concrete decisions made (bullets).
    - `files`: files created or meaningfully changed.
    - `openThreads`: unresolved threads / next steps for the following session.
-3. Use **`search_context`** to look up a past topic, file, or decision when relevant.
+   - `resolvedThreads`: open threads from EARLIER sessions you finished this time — copy
+     their text from `recall_context`'s "Still open" list so they stop resurfacing.
+3. Use **`update_context`** to amend the current session's digest in place (append
+   decisions/files/threads, or resolve threads) instead of saving a near-duplicate digest.
+4. Use **`search_context`** to look up a past topic, file, or decision when relevant.
 
-Write the digest the way you'd brief a teammate taking over. If the tools are not
-available, the user can connect the server from Genouk's **Memory** tab.
+`recall_context` leads with a consolidated "⏳ Still open across past sessions" list — treat
+that as your starting checklist for the chat. Write the digest the way you'd brief a teammate
+taking over. The `.mcp.json` is now written automatically when the Genouk extension activates;
+if the tools still aren't available, connect the server from Genouk's **Memory** tab.
 
 ## Project shape
 - This repository contains two related Node/TypeScript codebases:

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "genouk-memory": {
+      "command": "node",
+      "args": ["/Users/sameetmandewalker/Documents/Genouk/dist/mcpServer.js"],
+      "env": {
+        "GENOUK_REPO": "/Users/sameetmandewalker/Documents/Genouk"
+      }
+    }
+  }
+}
