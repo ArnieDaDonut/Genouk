@@ -128,8 +128,26 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+        case 'extendSessionPlan': {
+          if (!data.value) return;
+          try {
+            await this._store.extend(data.value);
+          } catch (error: any) {
+            this.post({ type: 'error', value: error.message });
+          } finally {
+            this.post({ type: 'extendSessionPlanDone' });
+          }
+          break;
+        }
         case 'syncToLinear': {
           await handleLinearSync(this._store, webviewView.webview);
+          break;
+        }
+        case 'copyText': {
+          if (typeof data.value === 'string') {
+            await vscode.env.clipboard.writeText(data.value);
+            vscode.window.showInformationMessage(data.label ? `${data.label} copied to clipboard.` : 'Copied to clipboard.');
+          }
           break;
         }
         case 'openPlanner': {

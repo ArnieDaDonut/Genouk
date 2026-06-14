@@ -1,10 +1,10 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Check, Circle, CircleDot, Trash2, Clock, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Check, Circle, CircleDot, Trash2, Clock, ExternalLink, Flag } from 'lucide-react';
 import { t } from './theme';
 import { Label } from './ui';
 import { SessionPlan, SessionTask } from './types';
 import {
-  Status, STATUS_ORDER, STATUS_LABEL, advance, regress, setStatus, removeTask, planStats, formatDuration,
+  Status, STATUS_ORDER, STATUS_LABEL, advance, regress, setStatus, removeTask, moveTask, planStats, formatDuration, estimatedFinish,
 } from './taskUtils';
 
 const DIFF_COLOR: Record<SessionTask['difficulty'], string> = {
@@ -22,6 +22,7 @@ const STATUS_ICON: Record<Status, React.ReactNode> = {
 /** Compact metrics strip: progress, counts, and remaining vs total time. */
 export const PlanSummary: React.FC<{ plan: SessionPlan }> = ({ plan }) => {
   const s = planStats(plan);
+  const finish = estimatedFinish(s.remainingMinutes);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: t.space.sm }}>
       <div style={{ display: 'flex', gap: t.space.sm, flexWrap: 'wrap' }}>
@@ -39,6 +40,11 @@ export const PlanSummary: React.FC<{ plan: SessionPlan }> = ({ plan }) => {
           <div style={{ width: `${s.pct}%`, background: t.color.good, height: '100%', borderRadius: 999, transition: `width ${t.motion.slow}s ease` }} />
         </div>
       </div>
+      {finish && s.pct < 100 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: t.font.size.xs, color: t.color.muted }}>
+          <Flag size={11} /> On pace to finish around <strong style={{ color: t.color.fg, fontFamily: t.font.mono }}>{finish}</strong>
+        </div>
+      )}
     </div>
   );
 };
@@ -55,9 +61,13 @@ interface TaskCardProps {
   onAdvance: () => void;
   onRegress: () => void;
   onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onAdvance, onRegress, onRemove }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onAdvance, onRegress, onRemove, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
   const isDone = task.status === 'completed';
   const isFirst = task.status === STATUS_ORDER[0];
   const isLast = task.status === STATUS_ORDER[STATUS_ORDER.length - 1];
@@ -108,10 +118,16 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onAdvance, onRegress, onRemov
           <Clock size={11} /> {task.estimatedMinutes}m
         </span>
         <div style={{ flex: 1 }} />
-        <button onClick={onRegress} disabled={isFirst} title="Move back" style={moveBtn(isFirst)}>
+        <button onClick={onMoveUp} disabled={!canMoveUp} title="Reorder up" style={moveBtn(!canMoveUp)}>
+          <ChevronUp size={14} />
+        </button>
+        <button onClick={onMoveDown} disabled={!canMoveDown} title="Reorder down" style={moveBtn(!canMoveDown)}>
+          <ChevronDown size={14} />
+        </button>
+        <button onClick={onRegress} disabled={isFirst} title="Move back a status" style={moveBtn(isFirst)}>
           <ChevronLeft size={14} />
         </button>
-        <button onClick={onAdvance} disabled={isLast} title="Move forward" style={moveBtn(isLast)}>
+        <button onClick={onAdvance} disabled={isLast} title="Move forward a status" style={moveBtn(isLast)}>
           <ChevronRight size={14} />
         </button>
       </div>
@@ -164,13 +180,17 @@ export const TaskBoard: React.FC<Props> = ({ plan, onSave, layout = 'stack' }) =
             Nothing here
           </div>
         ) : (
-          tasks.map((task) => (
+          tasks.map((task, i) => (
             <TaskCard
               key={task.id}
               task={task}
               onAdvance={() => onSave(setStatus(plan, task.id, advance(task.status)))}
               onRegress={() => onSave(setStatus(plan, task.id, regress(task.status)))}
               onRemove={() => onSave(removeTask(plan, task.id))}
+              onMoveUp={() => onSave(moveTask(plan, task.id, -1))}
+              onMoveDown={() => onSave(moveTask(plan, task.id, 1))}
+              canMoveUp={i > 0}
+              canMoveDown={i < tasks.length - 1}
             />
           ))
         )}

@@ -38,6 +38,31 @@ export function addTask(plan: SessionPlan, task: SessionTask): SessionPlan {
   return { ...plan, tasks: [...plan.tasks, task] };
 }
 
+/** Drop every completed task from the plan. */
+export function clearCompleted(plan: SessionPlan): SessionPlan {
+  return { ...plan, tasks: plan.tasks.filter((x) => x.status !== 'completed') };
+}
+
+/**
+ * Reorder a task relative to its same-status neighbours (the board groups by
+ * status, so swapping within the global array would look like nothing happened).
+ * `dir` -1 moves it earlier, +1 later.
+ */
+export function moveTask(plan: SessionPlan, id: string, dir: -1 | 1): SessionPlan {
+  const task = plan.tasks.find((x) => x.id === id);
+  if (!task) return plan;
+  const sameStatus = plan.tasks.filter((x) => x.status === task.status);
+  const localIndex = sameStatus.findIndex((x) => x.id === id);
+  const swapWith = sameStatus[localIndex + dir];
+  if (!swapWith) return plan;
+
+  const a = plan.tasks.findIndex((x) => x.id === id);
+  const b = plan.tasks.findIndex((x) => x.id === swapWith.id);
+  const tasks = [...plan.tasks];
+  [tasks[a], tasks[b]] = [tasks[b], tasks[a]];
+  return { ...plan, tasks };
+}
+
 export interface PlanStats {
   total: number;
   done: number;
@@ -73,6 +98,36 @@ export function formatDuration(mins: number): string {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+}
+
+/** Clock estimate for when the remaining work wraps up, e.g. "3:40 PM". */
+export function estimatedFinish(remainingMinutes: number): string | null {
+  if (remainingMinutes <= 0) return null;
+  const done = new Date(Date.now() + remainingMinutes * 60_000);
+  return done.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/** Render the plan as a GitHub-style Markdown checklist (for export/copy). */
+export function planToMarkdown(plan: SessionPlan): string {
+  const s = planStats(plan);
+  const lines: string[] = [
+    `# ${plan.goal}`,
+    '',
+    `**Estimated:** ${plan.estimatedDuration} · **Progress:** ${s.done}/${s.total} (${s.pct}%)`,
+    '',
+  ];
+  for (const status of STATUS_ORDER) {
+    const tasks = plan.tasks.filter((x) => x.status === status);
+    if (tasks.length === 0) continue;
+    lines.push(`## ${STATUS_LABEL[status]}`);
+    for (const task of tasks) {
+      const box = task.status === 'completed' ? '[x]' : '[ ]';
+      lines.push(`- ${box} **${task.title}** _(${task.difficulty}, ${task.estimatedMinutes}m)_`);
+      if (task.description) lines.push(`  - ${task.description}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n').trim() + '\n';
 }
 
 /** First in-progress task title, else first todo title, else null. */

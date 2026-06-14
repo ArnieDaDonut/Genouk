@@ -16,7 +16,7 @@ import { useFocusTimer, FocusPhase } from './useFocusTimer';
 import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted, MusicCue } from './musicEngine';
 import { PlannerView } from './PlannerView';
 import { BREAK_NUDGES } from './quips';
-import { nextTaskTitle, setStatus } from './taskUtils';
+import { nextTaskTitle, setStatus, planToMarkdown } from './taskUtils';
 
 
 
@@ -187,6 +187,7 @@ const App = () => {
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   const [syncingLinear, setSyncingLinear] = useState(false);
+  const [extendingSession, setExtendingSession] = useState(false);
 
   // Host -> webview messages
   useEffect(() => {
@@ -274,6 +275,9 @@ const App = () => {
         case 'syncToLinearResult':
           setSyncingLinear(false);
           break;
+        case 'extendSessionPlanDone':
+          setExtendingSession(false);
+          break;
         case 'tourStepDelta':
           if (typeof message.value === 'number') {
             setTourStep((s) => Math.max(0, Math.min((tourRef.current?.stops.length ?? 0), s + message.value)));
@@ -285,6 +289,7 @@ const App = () => {
           setChangeLoading(false);
           setSessionLoading(false);
           setSyncingLinear(false);
+          setExtendingSession(false);
           setTourLoading(false);
           break;
       }
@@ -391,6 +396,18 @@ const App = () => {
     setSyncingLinear(true);
     setError('');
     vscode.postMessage({ type: 'syncToLinear' });
+  };
+
+  const handleExtendSession = (instruction: string) => {
+    if (!instruction.trim() || extendingSession) return;
+    setExtendingSession(true);
+    setError('');
+    vscode.postMessage({ type: 'extendSessionPlan', value: instruction.trim() });
+  };
+
+  const handleExportSession = () => {
+    if (!sessionPlanRef.current) return;
+    vscode.postMessage({ type: 'copyText', value: planToMarkdown(sessionPlanRef.current), label: 'Plan' });
   };
 
   const handleGenerateTour = (description: string) => {
@@ -687,6 +704,9 @@ const App = () => {
               onPopout={() => vscode.postMessage({ type: 'openPlanner' })}
               onSyncLinear={handleSyncLinear}
               syncingLinear={syncingLinear}
+              onExtend={handleExtendSession}
+              extending={extendingSession}
+              onExport={handleExportSession}
             />
           </div>
         )}
