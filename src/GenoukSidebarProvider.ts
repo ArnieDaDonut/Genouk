@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { PromptReviewer } from './PromptReviewer';
-import { ChangeReviewer } from './ChangeReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
@@ -18,7 +17,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   private readonly _extensionUri: vscode.Uri;
 
   private readonly promptReviewer = new PromptReviewer();
-  private readonly changeReviewer = new ChangeReviewer();
   private readonly tourGenerator = new CodebaseTourGenerator();
 
   /** Send a message to the webview if it's currently resolved. */
@@ -97,15 +95,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
             this.post({ type: 'promptReviewResult', value: assessment });
 
             await rewritePromise;
-          } catch (error: any) {
-            this.post({ type: 'error', value: error.message });
-          }
-          break;
-        }
-        case 'reviewChanges': {
-          try {
-            const review = await this.changeReviewer.reviewChanges();
-            this.post({ type: 'changeReviewResult', value: review });
           } catch (error: any) {
             this.post({ type: 'error', value: error.message });
           }

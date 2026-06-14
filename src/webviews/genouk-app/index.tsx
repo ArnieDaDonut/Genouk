@@ -13,7 +13,7 @@ import { MemoryTab } from './MemoryTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
-import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted, MusicCue } from './musicEngine';
+import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted } from './musicEngine';
 import { PlannerView } from './PlannerView';
 import { BREAK_NUDGES } from './quips';
 import { nextTaskTitle, setStatus, planToMarkdown } from './taskUtils';
@@ -54,10 +54,6 @@ const App = () => {
   const [prompt, setPrompt] = useState('');
   const [review, setReview] = useState<PromptReviewResult | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
-
-  // Change review
-  const [changeReview, setChangeReview] = useState('');
-  const [changeLoading, setChangeLoading] = useState(false);
 
   // Session
   const [sessionPlan, setSessionPlan] = useState<SessionPlan | null>(null);
@@ -165,9 +161,6 @@ const App = () => {
   const [audioUnlocked, setAudioUnlocked] = useState(true);
   const [vibe, setVibe] = useState<VibeState>({ score: null, vibe: 'idle', errorsCount: 0, warningsCount: 0, fileName: '' });
 
-  // Last score-reactive music phrase that played (synthesized live, see musicEngine).
-  const [, setMusicCue] = useState<MusicCue | null>(null);
-
   // Latest playSFX event, surfaced to the Mascot. nonce makes repeats re-trigger.
   const [sfx, setSfx] = useState<{ kind: string; nonce: number } | null>(null);
 
@@ -252,7 +245,7 @@ const App = () => {
           setPromptLoading(false);
           // Play a synthesized phrase that matches how good the prompt scored.
           if (typeof message.value?.score === 'number') {
-            setMusicCue(playForScore(message.value.score));
+            playForScore(message.value.score);
           }
           break;
         case 'promptRewriteResult':
@@ -268,10 +261,6 @@ const App = () => {
               : prev,
           );
           break;
-        case 'changeReviewResult':
-          setChangeReview(message.value);
-          setChangeLoading(false);
-          break;
         case 'syncToLinearResult':
           setSyncingLinear(false);
           break;
@@ -286,7 +275,6 @@ const App = () => {
         case 'error':
           setError(message.value);
           setPromptLoading(false);
-          setChangeLoading(false);
           setSessionLoading(false);
           setSyncingLinear(false);
           setExtendingSession(false);
@@ -580,9 +568,8 @@ const App = () => {
       {/* Genouk character — docked at the top so he's front and centre */}
       <Mascot
         vibe={vibe}
-        thinking={promptLoading || changeLoading || sessionLoading}
+        thinking={promptLoading || sessionLoading}
         review={review}
-        changeReview={changeReview}
         sessionPlan={sessionPlan}
         sfx={sfx}
         errand={errand}
