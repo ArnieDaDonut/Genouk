@@ -4,7 +4,6 @@
   "description": "Genouk AI Assistant for prompt engineering and review",
   "version": "0.0.1",
   "publisher": "genouk-dev",
-  "icon": "public/icon.png",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
