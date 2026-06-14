@@ -88,6 +88,24 @@ const REDUCED_REACTIONS: Record<ReactionKind, ReactionMotion> = {
 
 const completed = (status: string) => status === 'completed';
 
+// Make an overlaid cosmetic read as part of the character instead of a floating
+// sticker: a thin dark outline (matching the robot's dark recesses) gives it
+// weight, and a short downward shadow seats it onto the head/body it sits on.
+// Applied as a CSS filter so it's crisp at display size regardless of the PNG's
+// source resolution.
+const ACCESSORY_OUTLINE = '#13171e';
+const ACCESSORY_FILTER = [
+  `drop-shadow(1px 0 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px 0 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(1px 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px 1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(1px -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(-1px -1px 0 ${ACCESSORY_OUTLINE})`,
+  `drop-shadow(0 3px 2px rgba(0,0,0,0.5))`,
+].join(' ');
+
 const vibeBank = (vibe: string): QuipBank => {
   if (vibe === 'chill' || vibe === 'fire' || vibe === 'worried' || vibe === 'chaos') {
     return vibe;
@@ -512,7 +530,8 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
               userSelect: 'none',
               // Cosmetics are detailed art, not pixel-art — render them smoothly.
               imageRendering: 'auto',
-              filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.35))',
+              // Outline + contact shadow so it reads as worn, not stuck on top.
+              filter: ACCESSORY_FILTER,
             }}
           />
         ) : worn.emoji ? (
