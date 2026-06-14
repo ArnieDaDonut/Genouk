@@ -33,7 +33,7 @@ export class PlannerPanel {
 
     PlannerPanel.current = new PlannerPanel(panel, extensionUri, store);
   }
-
+   
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
