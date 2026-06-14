@@ -460,6 +460,8 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
     const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
+    // Base URI for cosmetic cut-outs; the webview appends `/<file>.png` per accessory.
+    const accessoryBaseUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'accessories'));
 
     const nonce = getNonce();
 
@@ -481,6 +483,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
           window.PET_TOUR_SPRITE = "${tourSpriteUri}";
+          window.ACCESSORY_BASE = "${accessoryBaseUri}";
 
           const vscode = acquireVsCodeApi();
           window.acquireVsCodeApi = () => vscode;
