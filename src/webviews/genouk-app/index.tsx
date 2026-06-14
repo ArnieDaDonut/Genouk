@@ -16,14 +16,10 @@ import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
 import { ensureAudio, setMasterVolume, playForScore, playTier, playSfx, isAudioStarted, MusicCue, MusicTier } from './musicEngine';
 import { PlannerView } from './PlannerView';
+import { BREAK_NUDGES } from './quips';
+import { nextTaskTitle } from './taskUtils';
 
-const BREAK_NUDGES = [
-  'Break time! Stand up and stretch. 🧘',
-  "You've earned a breather — hydrate. 💧",
-  'Rest your eyes: look 20ft away for 20 seconds. 👀',
-  'Step away for a moment, the code will wait. ☕',
-  'Roll your shoulders and breathe. Back in a bit. 🌿',
-];
+
 
 declare const window: any;
 
@@ -97,21 +93,11 @@ const App = () => {
     setMascotSay({ text, nonce: sayNonce.current });
   };
 
-  /** First in-progress task, else first todo, else null. */
-  const nextTaskTitle = (): string | null => {
-    const plan = sessionPlanRef.current;
-    if (!plan) return null;
-    const inProgress = plan.tasks.find((x) => x.status === 'in_progress');
-    if (inProgress) return inProgress.title;
-    const todo = plan.tasks.find((x) => x.status === 'todo');
-    return todo ? todo.title : null;
-  };
-
   const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
     if (next === 'break') {
       speak(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
     } else {
-      const task = nextTaskTitle();
+      const task = nextTaskTitle(sessionPlanRef.current);
       speak(task ? `Break's over. Next up: ${task}` : "Break's over — let's get back to it. 🚀");
     }
   };
@@ -122,7 +108,7 @@ const App = () => {
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = nextTaskTitle();
+      const task = nextTaskTitle(sessionPlanRef.current);
       speak(task ? `Focus time. Work on: ${task}` : "Focus time — let's go. 💪");
     }
   };

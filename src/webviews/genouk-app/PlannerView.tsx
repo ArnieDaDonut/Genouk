@@ -9,15 +9,11 @@ import { TaskBoard, PlanSummary } from './TaskBoard';
 import { AddTaskForm } from './AddTaskForm';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
+import { BREAK_NUDGES } from './quips';
+import { nextTaskTitle } from './taskUtils';
 
 declare const window: any;
 
-const BREAK_NUDGES = [
-  'Break time — stand up and stretch.',
-  "You've earned a breather. Hydrate and reset.",
-  'Rest your eyes: look 20ft away for 20 seconds.',
-  'Step away for a moment. The code will wait.',
-];
 
 export const PlannerView: React.FC = () => {
   const vsCodeRef = useRef<any>(null);
@@ -75,14 +71,7 @@ export const PlannerView: React.FC = () => {
     vscode.postMessage({ type: 'syncToLinear' });
   };
 
-  const nextTaskTitle = (): string | null => {
-    const p = planRef.current;
-    if (!p) return null;
-    const active = p.tasks.find((x) => x.status === 'in_progress');
-    if (active) return active.title;
-    const todo = p.tasks.find((x) => x.status === 'todo');
-    return todo ? todo.title : null;
-  };
+  const getNextTaskTitle = (): string | null => nextTaskTitle(planRef.current);
 
   const showBanner = (text: string) => {
     setBanner(text);
@@ -93,7 +82,7 @@ export const PlannerView: React.FC = () => {
     if (next === 'break') {
       showBanner(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
     } else {
-      const task = nextTaskTitle();
+      const task = getNextTaskTitle();
       showBanner(task ? `Break over. Next up: ${task}` : 'Break over — back to it.');
     }
   };
@@ -103,7 +92,7 @@ export const PlannerView: React.FC = () => {
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = nextTaskTitle();
+      const task = getNextTaskTitle();
       showBanner(task ? `Focus block started. Working on: ${task}` : 'Focus block started.');
     }
   };

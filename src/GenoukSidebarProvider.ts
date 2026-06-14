@@ -4,7 +4,7 @@ import { ChangeReviewer } from './ChangeReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
-import { LinearService } from './LinearService';
+import { handleLinearSync } from './LinearService';
 import { getNonce } from './webviewHtml';
 import { log } from './log';
 
@@ -126,28 +126,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'syncToLinear': {
-          const config = vscode.workspace.getConfiguration('genouk');
-          const apiKey = config.get<string>('linearApiKey');
-          const teamId = config.get<string>('linearTeamId');
-          
-          if (!apiKey || !teamId) {
-            vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
-            break;
-          }
-
-          const plan = this._store.get();
-          if (!plan) break;
-
-          try {
-            const updatedPlan = await LinearService.syncPlanToLinear(plan, apiKey, teamId);
-            await this._store.set(updatedPlan);
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: true } });
-            vscode.window.showInformationMessage('Successfully synced tasks to Linear!');
-          } catch (error: any) {
-            webviewView.webview.postMessage({ type: 'error', value: error.message });
-            webviewView.webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
-          }
+          await handleLinearSync(this._store, webviewView.webview);
           break;
         }
         case 'openPlanner': {
@@ -455,8 +434,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       vscode.Uri.joinPath(this._extensionUri, 'dist', 'genoukApp.js')
     );
 
-    const petUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', '3b1b06c4-6aee-4ec5-bbd3-a82cd6693ca8.png'));
-    const videoUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'no_just_make_a_video_of_the_ro.mp4'));
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
     const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
@@ -476,10 +453,6 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
       <body>
         <div id="root"></div>
         <script nonce="${nonce}">
-          window.PET_IMAGES = [
-            "${petUri}"
-          ];
-          window.PET_VIDEO = "${videoUri}";
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
           window.PET_TOUR_SPRITE = "${tourSpriteUri}";

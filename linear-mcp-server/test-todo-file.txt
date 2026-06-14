@@ -1,6 +1,0 @@
-// TODO: Implement user login page
-// FIXME: Fix the memory leak on HeroCanvas
-// TODO [ENG-123]: Already synced task
-// TODO: Another new task to sync
-/* TODO: Block comment style */
-# TODO: Python/Bash comment style

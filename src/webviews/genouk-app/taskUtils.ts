@@ -74,3 +74,12 @@ export function formatDuration(mins: number): string {
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 }
+
+/** First in-progress task title, else first todo title, else null. */
+export function nextTaskTitle(plan: SessionPlan | null): string | null {
+  if (!plan) return null;
+  const inProgress = plan.tasks.find((x) => x.status === 'in_progress');
+  if (inProgress) return inProgress.title;
+  const todo = plan.tasks.find((x) => x.status === 'todo');
+  return todo ? todo.title : null;
+}

@@ -1,16 +1,8 @@
 import { AIProvider } from './AIProvider';
 import { gatherRepoContext } from './RepoContext';
+import { PromptReviewResult } from './shared/types';
 
-export interface PromptReviewResult {
-  isFinished: boolean;
-  score: number; // 0-100
-  feedback: string;
-  improvedPrompt: string;
-  tokenIssues: string[]; // specific weaknesses found
-  suggestions: string[]; // optional, high-value additions the developer might consider
-  estimatedOriginalTokens: number;
-  estimatedImprovedTokens: number;
-}
+export type { PromptReviewResult };
 
 const SYSTEM_PROMPT = `You are a blunt, senior prompt engineer reviewing a prompt a developer is about to send to a coding LLM. Your job is to make the prompt actually work, not to flatter it.
 
