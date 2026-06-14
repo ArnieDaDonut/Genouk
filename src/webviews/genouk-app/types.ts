@@ -8,6 +8,8 @@ export interface PromptReviewResult {
   suggestions?: string[];
   estimatedOriginalTokens: number;
   estimatedImprovedTokens: number;
+  /** True while the heavy rewrite (phase 2) is still streaming in. */
+  rewriting?: boolean;
 }
 
 export interface SessionTask {

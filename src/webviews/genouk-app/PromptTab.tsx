@@ -164,9 +164,11 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
               <div style={{ display: 'flex', gap: t.space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
                 <TokenBadge count={originalTokens} label="Original" />
                 <span style={{ color: t.color.muted }}>→</span>
-                <TokenBadge count={rewrittenTokens} label="Rewritten" />
+                {review.rewriting
+                  ? <span style={{ fontSize: t.font.size.sm, color: t.color.muted }}>rewriting…</span>
+                  : <TokenBadge count={rewrittenTokens} label="Rewritten" />}
               </div>
-              {delta !== 0 && (
+              {!review.rewriting && delta !== 0 && (
                 <span style={{ fontSize: t.font.size.sm, color: delta < 0 ? t.color.good : t.color.muted, fontWeight: t.font.weight.semibold }}>
                   {delta < 0 ? `−${Math.abs(delta)} tokens (${deltaPct}% leaner)` : `+${delta} tokens of added detail`}
                 </span>
@@ -193,15 +195,20 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.space.sm }}>
               <Label color={t.color.accent}>Rewritten prompt</Label>
-              <div style={{ display: 'flex', gap: t.space.xs }}>
-                <GhostButton onClick={handleCopy} title="Copy to clipboard">
-                  {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-                </GhostButton>
-                <GhostButton onClick={handleUseImproved} active title="Replace the input with this">
-                  <ArrowUp size={12} /> Use this
-                </GhostButton>
-              </div>
+              {!review.rewriting && (
+                <div style={{ display: 'flex', gap: t.space.xs }}>
+                  <GhostButton onClick={handleCopy} title="Copy to clipboard">
+                    {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                  </GhostButton>
+                  <GhostButton onClick={handleUseImproved} active title="Replace the input with this">
+                    <ArrowUp size={12} /> Use this
+                  </GhostButton>
+                </div>
+              )}
             </div>
+            {review.rewriting ? (
+              <LoadingRow label="Writing the production-grade rewrite…" />
+            ) : (
             <pre
               style={{
                 margin: 0,
@@ -219,6 +226,7 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
             >
               {review.improvedPrompt}
             </pre>
+            )}
           </div>
 
           {review.suggestions && review.suggestions.length > 0 && (

@@ -63,9 +63,27 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
         }
         case 'reviewPrompt': {
           if (!data.value) return;
+          const prompt = data.value as string;
           try {
-            const review = await this.promptReviewer.reviewPrompt(data.value);
-            this.post({ type: 'promptReviewResult', value: review });
+            // Gather repo context once, then run both phases in parallel.
+            // Phase 1 (assess) is small and lands first → the score + critique
+            // show almost immediately. Phase 2 (rewrite) is the heavy call and
+            // patches in once it finishes, so the user is never blocked on it.
+            const repoContext = await this.promptReviewer.repoContext();
+
+            const rewritePromise = this.promptReviewer
+              .rewritePrompt(prompt, repoContext)
+              .then((rewrite) => {
+                this.post({ type: 'promptRewriteResult', value: rewrite });
+              })
+              .catch((error: any) => {
+                this.post({ type: 'promptRewriteResult', value: { improvedPrompt: '', suggestions: [], error: error.message } });
+              });
+
+            const assessment = await this.promptReviewer.assessPrompt(prompt, repoContext);
+            this.post({ type: 'promptReviewResult', value: assessment });
+
+            await rewritePromise;
           } catch (error: any) {
             this.post({ type: 'error', value: error.message });
           }
@@ -196,6 +214,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     const walkSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-walk.png'));
     const waveSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-wave.png'));
     const tourSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-point_in_tour.png'));
+    const danceSpriteUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'genouk-dance.png'));
     // Base URI for the bundled instrument samples (trumpet, strings, etc.) that the
     // music engine loads via Tone.Sampler. Trailing slash so it can be used as a baseUrl.
     const samplesUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'public', 'samples'));
@@ -220,6 +239,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           window.PET_WALK_SPRITE = "${walkSpriteUri}";
           window.PET_WAVE_SPRITE = "${waveSpriteUri}";
           window.PET_TOUR_SPRITE = "${tourSpriteUri}";
+          window.PET_DANCE_SPRITE = "${danceSpriteUri}";
           window.GENOUK_SAMPLES = "${samplesUri}/";
 
           const vscode = acquireVsCodeApi();

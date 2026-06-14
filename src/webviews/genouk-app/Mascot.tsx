@@ -100,6 +100,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const walkSpriteUrl = window.PET_WALK_SPRITE || '';
   const waveSpriteUrl = window.PET_WAVE_SPRITE || '';
   const tourSpriteUrl = window.PET_TOUR_SPRITE || '';
+  const danceSpriteUrl = window.PET_DANCE_SPRITE || '';
   const reduced = useReducedMotion();
 
   // 'walking' -> entrance; 'arrived' -> resting/reacting.
@@ -108,6 +109,9 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   const [reaction, setReaction] = useState<{ kind: ReactionKind; text: string | null } | null>(null);
   const [asleep, setAsleep] = useState(false);
   const [strolling, setStrolling] = useState(false);
+  // Occasional in-place flourish — a dance or a wave. Stays centered (no walking
+  // around the panel); just a little personality every so often.
+  const [flair, setFlair] = useState<'none' | 'dance' | 'wave'>('none');
 
   // The "courier" — a separate overlay sprite that runs across the panel to press
   // a button for you, then scurries back off the left edge.
@@ -144,7 +148,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   // Sprite sheet geometry: both sheets are 1280x1280 = 5x5 grid of 25 frames.
   const columns = 5;
   const frameCount = 25;
-  const displayScale = 2.6;
+  const displayScale = 3.0;
   const frameSize = 128;
   const displayWidth = frameSize * displayScale;
   const displayHeight = frameSize * displayScale;
@@ -194,11 +198,11 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
 
   // Cycle sprite frames. Walking/strolling are brisk; sleeping is slow; else resting.
   useEffect(() => {
-    const sleepingNow = asleep && !reaction && !thinking && !strolling && phase === 'arrived';
-    const fps = phase === 'walking' || strolling ? 14 : sleepingNow ? 5 : 10;
+    const sleepingNow = asleep && !reaction && !thinking && !strolling && flair === 'none' && phase === 'arrived';
+    const fps = phase === 'walking' || strolling ? 14 : flair === 'dance' ? 12 : sleepingNow ? 5 : 10;
     const timer = setInterval(() => setCurrentFrame((prev) => (prev + 1) % frameCount), 1000 / fps);
     return () => clearInterval(timer);
-  }, [phase, asleep, reaction, thinking, strolling]);
+  }, [phase, asleep, reaction, thinking, strolling, flair]);
 
   // Courier runs its own frame loop while it's on screen.
   useEffect(() => {
@@ -274,26 +278,30 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     return () => clearTimeout(id);
   }, [walkSignal, reduced, markActivity]);
 
-  // Occasional idle stroll across the panel (disabled under reduced motion).
+  // Occasional in-place flourish: dance or wave (disabled under reduced motion).
+  // Genouk stays centered — no wandering around the panel — and just busts a move
+  // or throws a wave every so often.
   useEffect(() => {
     if (reduced) return;
-    let strollTimer: number;
+    let startTimer: number;
     let endTimer: number;
     const schedule = () => {
-      strollTimer = window.setTimeout(() => {
+      startTimer = window.setTimeout(() => {
         if (canStrollRef.current && !courierBusy.current) {
           markActivity();
-          setStrolling(true);
-          endTimer = window.setTimeout(() => setStrolling(false), 4600);
+          // Favor dancing when the dance sheet is available; otherwise wave.
+          const pick: 'dance' | 'wave' = danceSpriteUrl && Math.random() < 0.6 ? 'dance' : 'wave';
+          setFlair(pick);
+          endTimer = window.setTimeout(() => setFlair('none'), pick === 'dance' ? 5200 : 3000);
         }
         schedule();
-      }, 28000 + Math.random() * 30000);
+      }, 22000 + Math.random() * 22000);
     };
     schedule();
-    return () => { clearTimeout(strollTimer); clearTimeout(endTimer); };
-  }, [reduced, markActivity]);
+    return () => { clearTimeout(startTimer); clearTimeout(endTimer); };
+  }, [reduced, markActivity, danceSpriteUrl]);
 
-  // Greet once Genouk arrives.
+  // Greet once Genouk arrives — a quick wave, then break into a dance.
   useEffect(() => {
     if (tourPlaying) return;
     if (greetedRef.current) return;
@@ -301,7 +309,13 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
     greetedRef.current = true;
     showManual(quip('greeting'), 6000);
     markActivity();
-  }, [phase, showManual, markActivity, tourPlaying]);
+    // Let the arrival wave play for a beat, then bust a move (skipped under
+    // reduced motion or if the dance sheet isn't available).
+    if (reduced || !danceSpriteUrl) return;
+    const startDance = window.setTimeout(() => setFlair('dance'), 1800);
+    const stopDance = window.setTimeout(() => setFlair('none'), 1800 + 5200);
+    return () => { clearTimeout(startDance); clearTimeout(stopDance); };
+  }, [phase, showManual, markActivity, tourPlaying, reduced, danceSpriteUrl]);
 
   // --- Reaction triggers (derived from existing signals) ---
 
@@ -388,7 +402,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
   // --- Derived visual state + bubble ---
 
   const mood = VIBE_MOOD[vibe.vibe] || VIBE_MOOD.idle;
-  const sleepingNow = !reaction && !thinking && !strolling && asleep && phase === 'arrived';
+  const sleepingNow = !reaction && !thinking && !strolling && flair === 'none' && asleep && phase === 'arrived';
 
   const reactionText = reaction?.text ?? null;
   const bubbleText = reactionText
@@ -400,7 +414,14 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
 
   const useWalkSheet = phase === 'walking' || (strolling && !tourPlaying);
   const useTourSheet = (tourPlaying && strolling) || (tourPlaying && phase === 'arrived' && !!say);
-  const spriteUrl = useWalkSheet ? walkSpriteUrl : (useTourSheet ? tourSpriteUrl : waveSpriteUrl);
+  const useDanceSheet = flair === 'dance' && !!danceSpriteUrl && !tourPlaying;
+  const spriteUrl = useDanceSheet
+    ? danceSpriteUrl
+    : useWalkSheet
+      ? walkSpriteUrl
+      : useTourSheet
+        ? tourSpriteUrl
+        : waveSpriteUrl;
   const col = currentFrame % columns;
   const row = Math.floor(currentFrame / columns);
   const bgPosX = -(col * displayWidth);
@@ -435,6 +456,20 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
       scaleX: [1, 1, 1, -1, -1, 1],
     };
     arrivedTransition = { duration: 4.4, times: [0, 0.32, 0.46, 0.82, 0.92, 1], ease: 'easeInOut' };
+  } else if (flair === 'dance') {
+    // Groove in place — bob, sway, and a little scale pulse. Loops for the bit.
+    arrivedAnimate = {
+      opacity: 1,
+      x: 0,
+      y: [0, -12, 0, -8, 0],
+      rotate: [0, -5, 5, -4, 4, 0],
+      scale: [1, 1.05, 1, 1.06, 1],
+    };
+    arrivedTransition = { duration: 0.7, repeat: Infinity, ease: 'easeInOut' };
+  } else if (flair === 'wave') {
+    // Friendly wave — rock side to side with a gentle bob, staying put.
+    arrivedAnimate = { opacity: 1, x: 0, y: [0, -5, 0], rotate: [0, -7, 7, -6, 6, 0] };
+    arrivedTransition = { duration: 1.2, repeat: Infinity, ease: 'easeInOut' };
   } else if (sleepingNow) {
     arrivedAnimate = { opacity: 1, y: [0, -3, 0] };
     arrivedTransition = { y: { duration: 5, repeat: Infinity, ease: 'easeInOut' } };
@@ -539,7 +574,7 @@ export const Mascot: React.FC<MascotProps> = ({ vibe, thinking, review, changeRe
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 320,
+          maxWidth: 360,
           height: displayHeight,
           display: 'flex',
           alignItems: 'center',

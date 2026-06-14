@@ -191,12 +191,27 @@ const App = () => {
           setMemoryLoading(false);
           break;
         case 'promptReviewResult':
+          // Phase 1: score + critique land first. Stop the spinner so the user
+          // sees them immediately; the rewrite fills in via 'promptRewriteResult'.
           setReview(message.value);
           setPromptLoading(false);
           // Play a synthesized phrase that matches how good the prompt scored.
           if (typeof message.value?.score === 'number') {
             setMusicCue(playForScore(message.value.score));
           }
+          break;
+        case 'promptRewriteResult':
+          // Phase 2: merge the heavy rewrite into the review already on screen.
+          setReview((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  improvedPrompt: message.value?.improvedPrompt ?? '',
+                  suggestions: message.value?.suggestions ?? [],
+                  rewriting: false,
+                }
+              : prev,
+          );
           break;
         case 'changeReviewResult':
           setChangeReview(message.value);
