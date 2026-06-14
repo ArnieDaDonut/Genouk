@@ -1,4 +1,5 @@
 # Genouk
+Built By: Arnav M, Rohan T, Jeevithan M
 
 > Your AI pair-companion for prompt engineering, code review, and staying in flow — with a living mascot in your sidebar.
 
