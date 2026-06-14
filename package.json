@@ -64,6 +64,11 @@
         "command": "genouk.tourPrevious",
         "title": "Genouk: Live Tour Previous Stop",
         "icon": "$(arrow-left)"
+      },
+      {
+        "command": "genouk.testAgentDoneSound",
+        "title": "Genouk: Test Agent-Done Notification Sound",
+        "icon": "$(unmute)"
       }
     ],
     "keybindings": [
@@ -137,6 +142,11 @@
           "type": "string",
           "default": "",
           "description": "Your Linear Team ID (or Team Key, e.g., ENG) where tasks will be created."
+        },
+        "genouk.agentDoneSound": {
+          "type": "boolean",
+          "default": true,
+          "description": "Play Genouk's notification sound when another in-editor AI agent finishes writing code (detected when a burst of large, multi-line edits settles)."
         }
       }
     }

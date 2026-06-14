@@ -6,6 +6,7 @@ import { PlannerPanel } from './PlannerPanel';
 import { LinearService } from './LinearService';
 import { TodoScanner } from './TodoScanner';
 import { initSecrets, migrateSettingsKeysToSecrets, promptToSetApiKey, getSecret } from './secrets';
+import { playSystemNotification } from './sidebar/AgentActivityMonitor';
 import * as path from 'path';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -31,6 +32,12 @@ export function activate(context: vscode.ExtensionContext) {
       PlannerPanel.createOrShow(context.extensionUri, store);
     }),
     vscode.commands.registerCommand('genouk.setApiKey', () => promptToSetApiKey()),
+    vscode.commands.registerCommand('genouk.testAgentDoneSound', () => {
+      // Verifies the OS notification path independent of edit detection.
+      playSystemNotification();
+      sidebarProvider.playNotificationChime();
+      vscode.window.showInformationMessage('Genouk: played the agent-done notification sound.');
+    }),
     vscode.commands.registerCommand('genouk.tourNext', () => {
       sidebarProvider.nextTourStop();
     }),

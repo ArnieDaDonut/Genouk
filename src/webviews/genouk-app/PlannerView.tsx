@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { t } from './theme';
 import { Card, Label, PrimaryButton, GhostButton, LoadingRow } from './ui';
 import { SessionPlan } from './types';
-import { addTask } from './taskUtils';
+import { addTask, setStatus } from './taskUtils';
 import { TaskBoard, PlanSummary } from './TaskBoard';
 import { AddTaskForm } from './AddTaskForm';
 import { FocusTimerCard } from './FocusTimerCard';
@@ -73,14 +73,37 @@ export const PlannerView: React.FC = () => {
 
   const getNextTaskTitle = (): string | null => nextTaskTitle(planRef.current);
 
+  // The session task the current focus block is dedicated to (see App for the
+  // mirror of this logic on the sidebar side).
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [pendingCompleteId, setPendingCompleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tasks = plan?.tasks ?? [];
+    const stillValid = tasks.some((x) => x.id === focusTaskId && x.status !== 'completed');
+    if (stillValid) return;
+    const next = tasks.find((x) => x.status === 'in_progress') ?? tasks.find((x) => x.status === 'todo') ?? null;
+    setFocusTaskId(next ? next.id : null);
+  }, [plan]);
+
+  const focusTask = plan?.tasks.find((x) => x.id === focusTaskId) ?? null;
+  const focusableTasks = plan?.tasks.filter((x) => x.status !== 'completed') ?? [];
+  const pendingCompleteTask = plan?.tasks.find((x) => x.id === pendingCompleteId) ?? null;
+
   const showBanner = (text: string) => {
     setBanner(text);
     window.setTimeout(() => setBanner((b) => (b === text ? null : b)), 12000);
   };
 
-  const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
+  const handlePhaseEnd = (ended: FocusPhase, next: FocusPhase) => {
     if (next === 'break') {
-      showBanner(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      const finished = planRef.current?.tasks.find((x) => x.id === focusTaskId);
+      if (ended === 'focus' && finished && finished.status !== 'completed') {
+        setPendingCompleteId(finished.id);
+        showBanner(`Focus block done — finished “${finished.title}”?`);
+      } else {
+        showBanner(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      }
     } else {
       const task = getNextTaskTitle();
       showBanner(task ? `Break over. Next up: ${task}` : 'Break over — back to it.');
@@ -92,10 +115,25 @@ export const PlannerView: React.FC = () => {
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = getNextTaskTitle();
-      showBanner(task ? `Focus block started. Working on: ${task}` : 'Focus block started.');
+      const current = planRef.current;
+      const task = current?.tasks.find((x) => x.id === focusTaskId) ?? null;
+      if (current && task && task.status === 'todo') {
+        save(setStatus(current, task.id, 'in_progress'));
+      }
+      showBanner(task ? `Focus block started. Working on: ${task.title}` : 'Focus block started.');
     }
   };
+
+  const handleSelectFocusTask = (id: string) => setFocusTaskId(id);
+
+  const handleCompleteFocusTask = (id: string) => {
+    const current = planRef.current;
+    if (current) save(setStatus(current, id, 'completed'));
+    setPendingCompleteId(null);
+    showBanner('Checked off. 🎉');
+  };
+
+  const handleDismissComplete = () => setPendingCompleteId(null);
 
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box',
@@ -182,7 +220,16 @@ export const PlannerView: React.FC = () => {
                   <PlanSummary plan={plan} />
                 </div>
               </Card>
-              <FocusTimerCard timer={timer} onStart={startFocus} />
+              <FocusTimerCard
+                timer={timer}
+                onStart={startFocus}
+                tasks={focusableTasks}
+                focusTask={focusTask}
+                onSelectTask={handleSelectFocusTask}
+                pendingComplete={pendingCompleteTask}
+                onComplete={handleCompleteFocusTask}
+                onDismissComplete={handleDismissComplete}
+              />
             </div>
 
             {/* Right: kanban board */}

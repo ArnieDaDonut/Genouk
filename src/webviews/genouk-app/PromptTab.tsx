@@ -7,7 +7,7 @@ import {
   TARGET_MODELS,
   DEFAULT_MODEL_ID,
   findModel,
-  estimateTokensForModel,
+  estimateTotalTokens,
   contextPct,
   formatContextWindow,
 } from './models';
@@ -42,10 +42,11 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
     try { localStorage.setItem(MODEL_STORAGE_KEY, id); } catch { /* sandboxed */ }
   };
 
-  // Model-aware estimate: how many tokens this prompt costs the chosen target
-  // model, and how much of its context window that fills.
-  const modelTokens = estimateTokensForModel(prompt, targetModel);
-  const pct = contextPct(modelTokens, targetModel);
+  // Model-aware estimate for the whole exchange: the prompt's input tokens plus
+  // the response the model is expected to generate, and how much of its context
+  // window that full round-trip fills.
+  const estimate = estimateTotalTokens(prompt, targetModel);
+  const pct = contextPct(estimate.total, targetModel);
   const pctLabel = pct > 0 && pct < 0.1 ? '<0.1' : pct.toFixed(1);
 
   // Count from the actual text shown, not the model's self-estimate — the model's
@@ -140,9 +141,14 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
             </select>
           </label>
 
-          <span style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted, whiteSpace: 'nowrap' }}>
+          <span
+            style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted, whiteSpace: 'nowrap' }}
+            title={prompt.trim()
+              ? `Estimated round-trip: ~${estimate.input.toLocaleString()} prompt + ~${estimate.output.toLocaleString()} response tokens`
+              : undefined}
+          >
             {prompt.trim()
-              ? <>~{modelTokens.toLocaleString()} tokens · {pctLabel}% of {formatContextWindow(targetModel.contextWindow)}</>
+              ? <>~{estimate.total.toLocaleString()} tokens (in + out) · {pctLabel}% of {formatContextWindow(targetModel.contextWindow)}</>
               : <>context {formatContextWindow(targetModel.contextWindow)} tokens</>}
           </span>
         </div>

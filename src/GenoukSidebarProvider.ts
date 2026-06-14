@@ -11,6 +11,7 @@ import { log } from './log';
 import { TourNavigator } from './sidebar/TourNavigator';
 import { MemoryService } from './sidebar/MemoryService';
 import { VibeMonitor } from './sidebar/VibeMonitor';
+import { AgentActivityMonitor } from './sidebar/AgentActivityMonitor';
 
 export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
   _view?: vscode.WebviewView;
@@ -22,6 +23,11 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
 
   /** Send a message to the webview if it's currently resolved. */
   private readonly post = (msg: unknown) => this._view?.webview.postMessage(msg);
+
+  /** Fire the webview's synthesized notification chime (used by the test command). */
+  public playNotificationChime(): void {
+    this.post({ type: 'playSFX', value: 'notification' });
+  }
 
   private readonly tour: TourNavigator;
   private readonly memory: MemoryService;
@@ -36,6 +42,8 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
     this.tour = new TourNavigator(_context, this.post);
     this.memory = new MemoryService(this._extensionUri);
     this.vibe = new VibeMonitor(this._extensionUri, _context, this.post);
+    // Self-registers its own disposables on _context; no instance handle needed.
+    new AgentActivityMonitor(_context, this.post);
 
     // Keep the sidebar in sync when the popout planner edits the plan.
     this._context.subscriptions.push(

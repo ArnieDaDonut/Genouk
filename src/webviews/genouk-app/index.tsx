@@ -1,39 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Sparkles, ListTodo, GitBranch, Volume2, VolumeX, AlertCircle, Play, Compass, Palette, Square, Brain, LucideIcon } from 'lucide-react';
+import { Sparkles, ListTodo, Volume2, VolumeX, AlertCircle, Play, Compass, Palette, Square, Brain, LucideIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { t } from './theme';
 import { PromptReviewResult, SessionPlan, CodebaseTour, Personalization, DEFAULT_PERSONALIZATION, VibeState, MemoryData } from './types';
 import { PromptTab } from './PromptTab';
-import { ChangesTab } from './ChangesTab';
 import { SessionTab } from './SessionTab';
 import { TourTab } from './TourTab';
 import { PersonalizationTab } from './PersonalizationTab';
-import { AudioTab } from './AudioTab';
 import { MemoryTab } from './MemoryTab';
 import { Mascot, MascotMessage } from './Mascot';
 import { FocusTimerCard } from './FocusTimerCard';
 import { useFocusTimer, FocusPhase } from './useFocusTimer';
-import { ensureAudio, setMasterVolume, playForScore, playTier, playSfx, isAudioStarted, MusicCue, MusicTier } from './musicEngine';
+import { ensureAudio, setMasterVolume, playForScore, playSfx, isAudioStarted, MusicCue } from './musicEngine';
 import { PlannerView } from './PlannerView';
 import { BREAK_NUDGES } from './quips';
-import { nextTaskTitle } from './taskUtils';
+import { nextTaskTitle, setStatus } from './taskUtils';
 
 
 
 declare const window: any;
 
-type TabId = 'prompts' | 'session' | 'tour' | 'changes' | 'memory' | 'audio' | 'personalize';
+type TabId = 'prompts' | 'session' | 'tour' | 'memory' | 'personalize';
 
 const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
   { id: 'prompts', label: 'Prompts', Icon: Sparkles },
   { id: 'session', label: 'Session', Icon: ListTodo },
   { id: 'tour', label: 'Tour', Icon: Compass },
-  { id: 'changes', label: 'Changes', Icon: GitBranch },
   { id: 'memory', label: 'Memory', Icon: Brain },
   { id: 'personalize', label: 'You', Icon: Palette },
-  { id: 'audio', label: 'Sounds', Icon: Volume2 },
 ];
 
 const GLOBAL_CSS = `
@@ -94,14 +90,41 @@ const App = () => {
   const sessionPlanRef = useRef<SessionPlan | null>(null);
   useEffect(() => { sessionPlanRef.current = sessionPlan; }, [sessionPlan]);
 
+  // The session task the current focus block is dedicated to. After a focus
+  // block ends we surface a "mark done?" prompt for that task.
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [pendingCompleteId, setPendingCompleteId] = useState<string | null>(null);
+
+  // Keep the focused task pointing at a real, unfinished task. When the plan
+  // changes (or the focused task gets completed/removed) fall back to the next
+  // in-progress, then first todo.
+  useEffect(() => {
+    const tasks = sessionPlan?.tasks ?? [];
+    const stillValid = tasks.some((x) => x.id === focusTaskId && x.status !== 'completed');
+    if (stillValid) return;
+    const next = tasks.find((x) => x.status === 'in_progress') ?? tasks.find((x) => x.status === 'todo') ?? null;
+    setFocusTaskId(next ? next.id : null);
+  }, [sessionPlan]);
+
+  const focusTask = sessionPlan?.tasks.find((x) => x.id === focusTaskId) ?? null;
+  const focusableTasks = sessionPlan?.tasks.filter((x) => x.status !== 'completed') ?? [];
+  const pendingCompleteTask = sessionPlan?.tasks.find((x) => x.id === pendingCompleteId) ?? null;
+
   const speak = (text: string) => {
     sayNonce.current += 1;
     setMascotSay({ text, nonce: sayNonce.current });
   };
 
-  const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
+  const handlePhaseEnd = (ended: FocusPhase, next: FocusPhase) => {
     if (next === 'break') {
-      speak(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      // A focus block just finished — if it was tied to a task, ask whether it's done.
+      const finished = sessionPlanRef.current?.tasks.find((x) => x.id === focusTaskId);
+      if (ended === 'focus' && finished && finished.status !== 'completed') {
+        setPendingCompleteId(finished.id);
+        speak(`Nice work — did you finish “${finished.title}”?`);
+      } else {
+        speak(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      }
     } else {
       const task = nextTaskTitle(sessionPlanRef.current);
       speak(task ? `Break's over. Next up: ${task}` : "Break's over — let's get back to it. 🚀");
@@ -110,24 +133,40 @@ const App = () => {
 
   const timer = useFocusTimer(handlePhaseEnd);
 
-  /** Start the timer and have Genouk announce the current focus task. */
+  /** Start the timer and have Genouk announce the focused task. */
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = nextTaskTitle(sessionPlanRef.current);
-      speak(task ? `Focus time. Work on: ${task}` : "Focus time — let's go. 💪");
+      const plan = sessionPlanRef.current;
+      const task = plan?.tasks.find((x) => x.id === focusTaskId) ?? null;
+      // Starting a focus block on a fresh task moves it into "in progress".
+      if (plan && task && task.status === 'todo') {
+        handleSaveSession(setStatus(plan, task.id, 'in_progress'));
+      }
+      speak(task ? `Focus time. Work on: ${task.title}` : "Focus time — let's go. 💪");
     }
   };
 
+  const handleSelectFocusTask = (id: string) => setFocusTaskId(id);
+
+  const handleCompleteFocusTask = (id: string) => {
+    const plan = sessionPlanRef.current;
+    if (plan) handleSaveSession(setStatus(plan, id, 'completed'));
+    setPendingCompleteId(null);
+    speak('Boom — checked off. 🎉');
+  };
+
+  const handleDismissComplete = () => setPendingCompleteId(null);
+
   // Audio + diagnostics
   const [audioUris, setAudioUris] = useState<Record<string, string>>({});
-  const [volume, setVolume] = useState(0.4);
+  const [volume] = useState(0.4);
   const [muted, setMuted] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(true);
   const [vibe, setVibe] = useState<VibeState>({ score: null, vibe: 'idle', errorsCount: 0, warningsCount: 0, fileName: '' });
 
   // Last score-reactive music phrase that played (synthesized live, see musicEngine).
-  const [musicCue, setMusicCue] = useState<MusicCue | null>(null);
+  const [, setMusicCue] = useState<MusicCue | null>(null);
 
   // Latest playSFX event, surfaced to the Mascot. nonce makes repeats re-trigger.
   const [sfx, setSfx] = useState<{ kind: string; nonce: number } | null>(null);
@@ -332,14 +371,6 @@ const App = () => {
     setReview(null);
     setErrand({ kind: 'reviewPrompt', nonce: Date.now() });
     vscode.postMessage({ type: 'reviewPrompt', value: prompt });
-  };
-
-  const handleReviewChanges = () => {
-    setChangeLoading(true);
-    setError('');
-    setChangeReview('');
-    setErrand({ kind: 'reviewChanges', nonce: Date.now() });
-    vscode.postMessage({ type: 'reviewChanges' });
   };
 
   const handleGenerateSession = (goal: string) => {
@@ -638,7 +669,16 @@ const App = () => {
         )}
         {activeTab === 'session' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
-            <FocusTimerCard timer={timer} onStart={startFocus} />
+            <FocusTimerCard
+              timer={timer}
+              onStart={startFocus}
+              tasks={focusableTasks}
+              focusTask={focusTask}
+              onSelectTask={handleSelectFocusTask}
+              pendingComplete={pendingCompleteTask}
+              onComplete={handleCompleteFocusTask}
+              onDismissComplete={handleDismissComplete}
+            />
             <SessionTab
               plan={sessionPlan}
               loading={sessionLoading}
@@ -663,9 +703,6 @@ const App = () => {
             onStop={stopLiveTour}
           />
         )}
-        {activeTab === 'changes' && (
-          <ChangesTab changeReview={changeReview} loading={changeLoading} onReview={handleReviewChanges} />
-        )}
         {activeTab === 'memory' && (
           <MemoryTab
             data={memoryData}
@@ -682,21 +719,6 @@ const App = () => {
             personalization={personalization}
             onChange={handlePersonalizationChange}
             onPreviewSfx={handlePreviewSfx}
-          />
-        )}
-        {activeTab === 'audio' && (
-          <AudioTab
-            volume={volume}
-            setVolume={setVolume}
-            muted={muted}
-            setMuted={setMuted}
-            vibe={vibe}
-            musicCue={musicCue}
-            onPreviewTier={(tier: MusicTier) => {
-              ensureAudio()
-                .then(() => { setMasterVolume(volume, muted); setMusicCue(playTier(tier)); })
-                .catch(() => {});
-            }}
           />
         )}
       </motion.div>
