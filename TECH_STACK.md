@@ -144,14 +144,6 @@ Chosen over Webpack for speed — the `npm run dev` watch mode rebuilds in milli
 ## One-line summary
 
 > **TypeScript** VS Code extension with a **React** webview, bundled by **esbuild** into three runtimes (extension host, webview, MCP server). AI runs on **Vultr Serverless Inference** (DeepSeek-V4-Flash) behind a single `AIProvider` gateway. Cross-chat memory uses the **Model Context Protocol** plus a managed `CLAUDE.md` block; tasks sync to **Linear**. **Tone.js** does audio, **Framer Motion** does animation. No database — state lives in VS Code `workspaceState` and text files.
-jjjjjjjjjjjjjjjjjtbgtg678itbg6mkimnbhhibn uk
-\1217/
-+-/*
-
-/
-
-
-
 
 
 
