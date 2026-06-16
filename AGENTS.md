@@ -174,4 +174,4 @@ Built and tested the genouk-memory MCP server. Verified save/recall carries cont
 - Try it from a real agent (Cursor/Claude Code)
 
 > When you finish a meaningful chunk of work, call `save_context` (genouk-memory MCP) so the next chat carries it forward.
-<!-- GENOUK:MEMORY:END -->
+<!-- GENOUK:MEMORY:END 

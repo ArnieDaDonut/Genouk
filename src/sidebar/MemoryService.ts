@@ -20,7 +20,7 @@ import {
  * than bloating the sidebar message router.
  */
 export class MemoryService {
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(private readonly extensionUri: vscode.Uri) { }
 
   /** Absolute path of the first workspace folder, or null if none is open. */
   private repoRoot(): string | null {
@@ -30,6 +30,16 @@ export class MemoryService {
   /** Filesystem path to the bundled MCP server the agent will spawn. */
   private mcpServerPath(): string {
     return vscode.Uri.joinPath(this.extensionUri, 'dist', 'mcpServer.js').fsPath;
+  }
+
+  /** Filesystem path to the bundled auto-save Stop hook the agent will run on each turn end. */
+  private hookScriptPath(): string {
+    return vscode.Uri.joinPath(this.extensionUri, 'dist', 'stopHook.js').fsPath;
+  }
+
+  /** The shell command Claude Code runs for the auto-save Stop hook. */
+  private hookCommand(): string {
+    return `node "${this.hookScriptPath()}"`;
   }
 
   /** The genouk-memory entry for an agent's MCP config. */
@@ -132,6 +142,43 @@ export class MemoryService {
   }
 
   /**
+   * Merge the auto-save Stop hook into the repo's .claude/settings.json without clobbering
+   * permissions or other hooks. The hook runs on every turn end and records what the current
+   * chat is about (keyed by session id), so the "last chat" pointer actually advances WITHOUT
+   * depending on the agent remembering to call save_context. Returns true if the file changed.
+   */
+  private mergeStopHook(repoRoot: string): boolean {
+    const dir = path.join(repoRoot, '.claude');
+    const file = path.join(dir, 'settings.json');
+    let config: any = {};
+    try {
+      config = JSON.parse(fs.readFileSync(file, 'utf8')) || {};
+    } catch {
+      config = {};
+    }
+    if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
+    if (!Array.isArray(config.hooks.Stop)) config.hooks.Stop = [];
+
+    const desired = this.hookCommand();
+    const isOurs = (entry: any) =>
+      Array.isArray(entry?.hooks) && entry.hooks.some((h: any) => typeof h?.command === 'string' && h.command.includes('stopHook.js'));
+
+    // Already wired to the exact command → nothing to do (avoids needless writes/git noise).
+    const existing = config.hooks.Stop.filter(isOurs);
+    if (existing.length === 1 && existing[0].hooks.length === 1 && existing[0].hooks[0].command === desired) {
+      return false;
+    }
+
+    // Drop any prior Genouk hook entries (self-heals a changed extension path), then add ours.
+    config.hooks.Stop = config.hooks.Stop.filter((e: any) => !isOurs(e));
+    config.hooks.Stop.push({ hooks: [{ type: 'command', command: desired }] });
+
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    return true;
+  }
+
+  /**
    * Ensure the repo's .mcp.json points at the bundled memory server, silently. Called on
    * activation so memory is connected out of the box — without this, the tools never load
    * into the agent and cross-chat recall simply never happens. Best-effort: never throws.
@@ -143,6 +190,13 @@ export class MemoryService {
       this.mergeConfig(repoRoot);
     } catch {
       /* best-effort: the Memory tab's "Write .mcp.json" button remains as a fallback */
+    }
+    try {
+      // Register the auto-save Stop hook so chats get recorded without the agent having to
+      // call save_context — this is what keeps the "last chat" carry-over actually current.
+      this.mergeStopHook(repoRoot);
+    } catch {
+      /* best-effort: recall still works; only the automatic save side is degraded */
     }
     // Refresh the CLAUDE.md carry-over block too, so a fresh agent chat auto-loads the
     // latest memory even if it never connects the MCP server.
@@ -186,3 +240,4 @@ export class MemoryService {
     if (repoRoot) { clearDigests(repoRoot); clearFacts(repoRoot); this.syncMemoryFile(); }
   }
 }
+
