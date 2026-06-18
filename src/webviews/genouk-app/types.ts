@@ -13,6 +13,9 @@ export type {
   CodebaseTour,
   Personalization,
   VibeState,
+  SessionDigest,
+  MemoryData,
+  Fact,
 } from '../../shared/types';
 
 export {

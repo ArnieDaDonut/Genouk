@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ListTodo, RefreshCw, X, Bell, AlertCircle } from 'lucide-react';
+import { ListTodo, RefreshCw, X, Bell, AlertCircle, Copy, Sparkles, Eraser } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { t } from './theme';
 import { Card, Label, PrimaryButton, GhostButton, LoadingRow } from './ui';
 import { SessionPlan } from './types';
-import { addTask } from './taskUtils';
+import { addTask, setStatus, clearCompleted, planToMarkdown, planStats } from './taskUtils';
 import { TaskBoard, PlanSummary } from './TaskBoard';
 import { AddTaskForm } from './AddTaskForm';
 import { FocusTimerCard } from './FocusTimerCard';
@@ -26,6 +26,8 @@ export const PlannerView: React.FC = () => {
   const [error, setError] = useState('');
   const [banner, setBanner] = useState<string | null>(null);
   const [syncingLinear, setSyncingLinear] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [extendText, setExtendText] = useState('');
 
   const planRef = useRef<SessionPlan | null>(null);
   useEffect(() => { planRef.current = plan; }, [plan]);
@@ -41,10 +43,15 @@ export const PlannerView: React.FC = () => {
         case 'syncToLinearResult':
           setSyncingLinear(false);
           break;
+        case 'extendSessionPlanDone':
+          setExtending(false);
+          setExtendText('');
+          break;
         case 'error':
           setError(message.value);
           setLoading(false);
           setSyncingLinear(false);
+          setExtending(false);
           break;
       }
     };
@@ -71,16 +78,57 @@ export const PlannerView: React.FC = () => {
     vscode.postMessage({ type: 'syncToLinear' });
   };
 
+  const handleExportMarkdown = () => {
+    if (!plan) return;
+    vscode.postMessage({ type: 'copyText', value: planToMarkdown(plan), label: 'Plan' });
+    showBanner('Plan copied as Markdown. 📋');
+  };
+
+  const handleClearDone = () => {
+    if (!plan) return;
+    save(clearCompleted(plan));
+  };
+
+  const handleExtend = () => {
+    if (!extendText.trim() || extending) return;
+    setExtending(true);
+    setError('');
+    vscode.postMessage({ type: 'extendSessionPlan', value: extendText.trim() });
+  };
+
   const getNextTaskTitle = (): string | null => nextTaskTitle(planRef.current);
+
+  // The session task the current focus block is dedicated to (see App for the
+  // mirror of this logic on the sidebar side).
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [pendingCompleteId, setPendingCompleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tasks = plan?.tasks ?? [];
+    const stillValid = tasks.some((x) => x.id === focusTaskId && x.status !== 'completed');
+    if (stillValid) return;
+    const next = tasks.find((x) => x.status === 'in_progress') ?? tasks.find((x) => x.status === 'todo') ?? null;
+    setFocusTaskId(next ? next.id : null);
+  }, [plan]);
+
+  const focusTask = plan?.tasks.find((x) => x.id === focusTaskId) ?? null;
+  const focusableTasks = plan?.tasks.filter((x) => x.status !== 'completed') ?? [];
+  const pendingCompleteTask = plan?.tasks.find((x) => x.id === pendingCompleteId) ?? null;
 
   const showBanner = (text: string) => {
     setBanner(text);
     window.setTimeout(() => setBanner((b) => (b === text ? null : b)), 12000);
   };
 
-  const handlePhaseEnd = (_ended: FocusPhase, next: FocusPhase) => {
+  const handlePhaseEnd = (ended: FocusPhase, next: FocusPhase) => {
     if (next === 'break') {
-      showBanner(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      const finished = planRef.current?.tasks.find((x) => x.id === focusTaskId);
+      if (ended === 'focus' && finished && finished.status !== 'completed') {
+        setPendingCompleteId(finished.id);
+        showBanner(`Focus block done — finished “${finished.title}”?`);
+      } else {
+        showBanner(BREAK_NUDGES[Math.floor(Math.random() * BREAK_NUDGES.length)]);
+      }
     } else {
       const task = getNextTaskTitle();
       showBanner(task ? `Break over. Next up: ${task}` : 'Break over — back to it.');
@@ -92,10 +140,25 @@ export const PlannerView: React.FC = () => {
   const startFocus = () => {
     timer.start();
     if (timer.phase === 'focus') {
-      const task = getNextTaskTitle();
-      showBanner(task ? `Focus block started. Working on: ${task}` : 'Focus block started.');
+      const current = planRef.current;
+      const task = current?.tasks.find((x) => x.id === focusTaskId) ?? null;
+      if (current && task && task.status === 'todo') {
+        save(setStatus(current, task.id, 'in_progress'));
+      }
+      showBanner(task ? `Focus block started. Working on: ${task.title}` : 'Focus block started.');
     }
   };
+
+  const handleSelectFocusTask = (id: string) => setFocusTaskId(id);
+
+  const handleCompleteFocusTask = (id: string) => {
+    const current = planRef.current;
+    if (current) save(setStatus(current, id, 'completed'));
+    setPendingCompleteId(null);
+    showBanner('Checked off. 🎉');
+  };
+
+  const handleDismissComplete = () => setPendingCompleteId(null);
 
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box',
@@ -116,6 +179,9 @@ export const PlannerView: React.FC = () => {
         </div>
         {plan && (
           <div style={{ display: 'flex', gap: t.space.sm }}>
+            <GhostButton onClick={handleExportMarkdown} title="Copy plan as a Markdown checklist">
+              <Copy size={13} /> Export MD
+            </GhostButton>
             <GhostButton onClick={handleSyncLinear} disabled={syncingLinear} title="Sync tasks to Linear">
               <RefreshCw size={13} className={syncingLinear ? "genouk-spin" : ""} /> {syncingLinear ? "Syncing..." : "Sync Linear"}
             </GhostButton>
@@ -182,14 +248,48 @@ export const PlannerView: React.FC = () => {
                   <PlanSummary plan={plan} />
                 </div>
               </Card>
-              <FocusTimerCard timer={timer} onStart={startFocus} />
+              <FocusTimerCard
+                timer={timer}
+                onStart={startFocus}
+                tasks={focusableTasks}
+                focusTask={focusTask}
+                onSelectTask={handleSelectFocusTask}
+                pendingComplete={pendingCompleteTask}
+                onComplete={handleCompleteFocusTask}
+                onDismissComplete={handleDismissComplete}
+              />
             </div>
 
             {/* Right: kanban board */}
             <div style={{ flex: '3 1 480px', minWidth: 300, display: 'flex', flexDirection: 'column', gap: t.space.md }}>
               <Card style={{ display: 'flex', flexDirection: 'column', gap: t.space.md }}>
                 <TaskBoard plan={plan} onSave={save} layout="columns" />
+                {planStats(plan).done > 0 && (
+                  <GhostButton onClick={handleClearDone} title="Remove completed tasks" style={{ alignSelf: 'flex-start' }}>
+                    <Eraser size={13} /> Clear {planStats(plan).done} done
+                  </GhostButton>
+                )}
               </Card>
+
+              {/* Extend the plan with more AI-generated tasks */}
+              <Card style={{ display: 'flex', flexDirection: 'column', gap: t.space.sm }}>
+                <Label color={t.color.accent}>Add tasks with AI</Label>
+                <div style={{ display: 'flex', gap: t.space.sm }}>
+                  <input
+                    type="text"
+                    value={extendText}
+                    onChange={(e) => setExtendText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleExtend(); }}
+                    placeholder="e.g. add tests and error handling…"
+                    disabled={extending}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <PrimaryButton onClick={handleExtend} disabled={!extendText.trim() || extending}>
+                    <Sparkles size={14} /> {extending ? 'Adding…' : 'Add'}
+                  </PrimaryButton>
+                </div>
+              </Card>
+
               <AddTaskForm onAdd={(task) => save(addTask(plan, task))} />
             </div>
           </div>

@@ -41,6 +41,8 @@ export interface PromptReviewResult {
   suggestions?: string[];
   estimatedOriginalTokens: number;
   estimatedImprovedTokens: number;
+  /** True while the heavy rewrite is still being generated (phase 2). */
+  rewriting?: boolean;
 }
 
 /* ------------------------------------------------------------------ *
@@ -100,4 +102,46 @@ export interface VibeState {
 export function estimateTokens(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   return Math.round(words * 1.3);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Session memory & digests
+ * ------------------------------------------------------------------ */
+
+/** A stored cross-chat session digest (mirrors src/memory/sessionMemoryStore.ts). */
+export interface SessionDigest {
+  id: string;
+  ts: string;
+  title: string;
+  summary: string;
+  decisions: string[];
+  files: string[];
+  openThreads: string[];
+  /** Earlier-session threads this session closed out (drives the "still open" rollup). */
+  resolvedThreads?: string[];
+}
+
+export interface Fact {
+  id: string;
+  ts: string;
+  /** The thing to remember, verbatim, e.g. "The secret word is BANANA". */
+  text: string;
+}
+
+/** Everything the Memory tab needs: stored digests, remembered facts, and carry-over status. */
+export interface MemoryData {
+  digests: SessionDigest[];
+  facts: Fact[];
+  /** Pretty-printed .mcp.json snippet the user can copy into their agent (for the save side). */
+  mcpConfig: string;
+  /** Absolute path where Genouk writes .mcp.json (the repo root), or null if no repo. */
+  mcpConfigPath: string | null;
+  /** True once a genouk-memory entry exists in the repo's .mcp.json. */
+  configWritten: boolean;
+  /** Absolute path of the CLAUDE.md that carries the auto-loaded memory block, or null. */
+  memoryFilePath: string | null;
+  /** True when the managed carry-over block is present in CLAUDE.md (recall is wired up). */
+  memoryFileWritten: boolean;
+  /** Short label for the active repo (basename), or null if no folder is open. */
+  repoLabel: string | null;
 }

@@ -2,7 +2,7 @@
   "name": "genouk",
   "displayName": "Genouk",
   "description": "Genouk AI Assistant for prompt engineering and review",
-  "version": "0.0.1",
+  "version": "1.0.1",
   "publisher": "genouk-dev",
   "license": "MIT",
   "engines": {
@@ -46,6 +46,11 @@
         "icon": "$(window)"
       },
       {
+        "command": "genouk.setApiKey",
+        "title": "Genouk: Set API Key",
+        "icon": "$(key)"
+      },
+      {
         "command": "genouk.syncTodosToLinear",
         "title": "Genouk: Sync TODOs in Active File to Linear",
         "icon": "$(sync)"
@@ -59,6 +64,11 @@
         "command": "genouk.tourPrevious",
         "title": "Genouk: Live Tour Previous Stop",
         "icon": "$(arrow-left)"
+      },
+      {
+        "command": "genouk.testAgentDoneSound",
+        "title": "Genouk: Test Agent-Done Notification Sound",
+        "icon": "$(unmute)"
       }
     ],
     "keybindings": [
@@ -100,34 +110,13 @@
         "genouk.vultrApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Vultr Serverless Inference API key (primary provider)."
+          "description": "Fallback Vultr Serverless Inference API key. Prefer the \"Genouk: Set API Key\" command, which stores it in the OS keychain instead of plaintext settings.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Get a key from the [Vultr Inference dashboard](https://my.vultr.com/inference/). When set, Vultr is the primary provider."
         },
         "genouk.vultrModel": {
           "type": "string",
-          "default": "llama-2-70b-chat-Q5_K_M",
-          "description": "Vultr inference model ID."
-        },
-        "genouk.groqApiKey": {
-          "type": "string",
           "default": "",
-          "description": "Your Groq API key for Genouk AI.",
-          "markdownDescription": "Get a free key at [console.groq.com/keys](https://console.groq.com/keys)"
-        },
-        "genouk.model": {
-          "type": "string",
-          "default": "llama-3.3-70b-versatile",
-          "description": "Groq model used for prompt and change review."
-        },
-        "genouk.geminiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Your Google Gemini API key — used as a free fallback when Groq is rate-limited.",
-          "markdownDescription": "Free fallback provider. Get a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)"
-        },
-        "genouk.geminiModel": {
-          "type": "string",
-          "default": "gemini-2.0-flash",
-          "description": "Gemini model used as the fallback (gemini-2.0-flash is free and fast)."
+          "description": "Vultr inference model id (e.g. deepseek-ai/DeepSeek-V4-Flash). Leave blank to use the VULTR_MODEL env var or the built-in default."
         },
         "genouk.maxTokens": {
           "type": "number",
@@ -146,13 +135,18 @@
         "genouk.linearApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your Linear Personal API Key.",
-          "markdownDescription": "Used to sync your session tasks to Linear. Generate one at [linear.app/settings/api](https://linear.app/settings/api)."
+          "description": "Fallback Linear Personal API Key. Prefer the \"Genouk: Set API Key\" command, which stores it securely.",
+          "markdownDescription": "**Fallback only** — prefer the **Genouk: Set API Key** command (stored securely in the OS keychain). Generate one at [linear.app/settings/api](https://linear.app/settings/api)."
         },
         "genouk.linearTeamId": {
           "type": "string",
           "default": "",
           "description": "Your Linear Team ID (or Team Key, e.g., ENG) where tasks will be created."
+        },
+        "genouk.agentDoneSound": {
+          "type": "boolean",
+          "default": true,
+          "description": "Play Genouk's notification sound when another in-editor AI agent finishes writing code (detected when a burst of large, multi-line edits settles)."
         }
       }
     }
@@ -177,12 +171,14 @@
   },
   "dependencies": {
     "@linear/sdk": "^86.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "framer-motion": "^11.0.0",
-    "groq-sdk": "^1.2.1",
+    "jsonrepair": "^3.14.0",
     "lucide-react": "^0.360.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tone": "^15.1.22"
+    "tone": "^15.1.22",
+    "zod": "^3.25.76"
   }
 }

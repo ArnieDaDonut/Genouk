@@ -3,6 +3,24 @@ import { Zap, Copy, Check, ArrowUp, Lightbulb } from 'lucide-react';
 import { t } from './theme';
 import { Card, Label, PrimaryButton, GhostButton, ScoreRing, TokenBadge, LoadingRow } from './ui';
 import { PromptReviewResult, estimateTokens } from './types';
+import {
+  TARGET_MODELS,
+  DEFAULT_MODEL_ID,
+  findModel,
+  estimateTotalTokens,
+  contextPct,
+  formatContextWindow,
+} from './models';
+
+// Persist the chosen target model across reloads (webview localStorage is sandboxed).
+const MODEL_STORAGE_KEY = 'genouk.targetModel';
+function loadModelId(): string {
+  try {
+    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL_ID;
+  } catch {
+    return DEFAULT_MODEL_ID;
+  }
+}
 
 interface Props {
   prompt: string;
@@ -17,7 +35,20 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [copied, setCopied] = useState(false);
 
-  const liveTokens = estimateTokens(prompt);
+  const [modelId, setModelId] = useState<string>(loadModelId);
+  const targetModel = findModel(modelId);
+  const onModelChange = (id: string) => {
+    setModelId(id);
+    try { localStorage.setItem(MODEL_STORAGE_KEY, id); } catch { /* sandboxed */ }
+  };
+
+  // Model-aware estimate for the whole exchange: the prompt's input tokens plus
+  // the response the model is expected to generate, and how much of its context
+  // window that full round-trip fills.
+  const estimate = estimateTotalTokens(prompt, targetModel);
+  const pct = contextPct(estimate.total, targetModel);
+  const pctLabel = pct > 0 && pct < 0.1 ? '<0.1' : pct.toFixed(1);
+
   // Count from the actual text shown, not the model's self-estimate — the model's
   // numbers drifted from what it actually produced.
   const originalTokens = estimateTokens(prompt);
@@ -73,11 +104,53 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
               outline: 'none',
             }}
           />
-          {prompt && (
-            <div style={{ position: 'absolute', bottom: 8, right: 10, fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted }}>
-              ~{liveTokens} tokens
-            </div>
-          )}
+        </div>
+
+        {/* Target-model picker + live, model-aware token estimate */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: t.space.sm,
+            marginTop: t.space.sm,
+            flexWrap: 'wrap',
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: t.space.xs, fontSize: t.font.size.xs, color: t.color.muted }}>
+            <span>Target model</span>
+            <select
+              value={modelId}
+              onChange={(e) => onModelChange(e.target.value)}
+              title="The model you'll send this prompt to — used to estimate token cost"
+              style={{
+                background: t.color.inputBg,
+                color: t.color.inputFg,
+                border: `1px solid ${t.color.inputBorder}`,
+                borderRadius: t.radius.sm,
+                padding: '3px 6px',
+                fontSize: t.font.size.xs,
+                fontFamily: t.font.ui,
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {TARGET_MODELS.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <span
+            style={{ fontSize: t.font.size.xs, fontFamily: t.font.mono, color: t.color.muted, whiteSpace: 'nowrap' }}
+            title={prompt.trim()
+              ? `Estimated round-trip: ~${estimate.input.toLocaleString()} prompt + ~${estimate.output.toLocaleString()} response tokens`
+              : undefined}
+          >
+            {prompt.trim()
+              ? <>~{estimate.total.toLocaleString()} tokens (in + out) · {pctLabel}% of {formatContextWindow(targetModel.contextWindow)}</>
+              : <>context {formatContextWindow(targetModel.contextWindow)} tokens</>}
+          </span>
         </div>
 
         <PrimaryButton id="genouk-btn-reviewPrompt" onClick={onReview} disabled={loading || !prompt.trim()} busy={loading} style={{ marginTop: t.space.sm }}>
@@ -97,9 +170,11 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
               <div style={{ display: 'flex', gap: t.space.xs, flexWrap: 'wrap', alignItems: 'center' }}>
                 <TokenBadge count={originalTokens} label="Original" />
                 <span style={{ color: t.color.muted }}>→</span>
-                <TokenBadge count={rewrittenTokens} label="Rewritten" />
+                {review.rewriting
+                  ? <span style={{ fontSize: t.font.size.sm, color: t.color.muted }}>rewriting…</span>
+                  : <TokenBadge count={rewrittenTokens} label="Rewritten" />}
               </div>
-              {delta !== 0 && (
+              {!review.rewriting && delta !== 0 && (
                 <span style={{ fontSize: t.font.size.sm, color: delta < 0 ? t.color.good : t.color.muted, fontWeight: t.font.weight.semibold }}>
                   {delta < 0 ? `−${Math.abs(delta)} tokens (${deltaPct}% leaner)` : `+${delta} tokens of added detail`}
                 </span>
@@ -126,15 +201,20 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.space.sm }}>
               <Label color={t.color.accent}>Rewritten prompt</Label>
-              <div style={{ display: 'flex', gap: t.space.xs }}>
-                <GhostButton onClick={handleCopy} title="Copy to clipboard">
-                  {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
-                </GhostButton>
-                <GhostButton onClick={handleUseImproved} active title="Replace the input with this">
-                  <ArrowUp size={12} /> Use this
-                </GhostButton>
-              </div>
+              {!review.rewriting && (
+                <div style={{ display: 'flex', gap: t.space.xs }}>
+                  <GhostButton onClick={handleCopy} title="Copy to clipboard">
+                    {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
+                  </GhostButton>
+                  <GhostButton onClick={handleUseImproved} active title="Replace the input with this">
+                    <ArrowUp size={12} /> Use this
+                  </GhostButton>
+                </div>
+              )}
             </div>
+            {review.rewriting ? (
+              <LoadingRow label="Writing the production-grade rewrite…" />
+            ) : (
             <pre
               style={{
                 margin: 0,
@@ -152,6 +232,7 @@ export const PromptTab: React.FC<Props> = ({ prompt, setPrompt, review, setRevie
             >
               {review.improvedPrompt}
             </pre>
+            )}
           </div>
 
           {review.suggestions && review.suggestions.length > 0 && (

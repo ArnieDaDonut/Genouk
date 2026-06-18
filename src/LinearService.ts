@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { LinearClient } from '@linear/sdk';
 import { SessionPlan } from './shared/types';
 import { SessionStore } from './SessionStore';
+import { getSecret } from './secrets';
 
 /**
  * Run the full sync-to-Linear flow and post the result to a webview.
@@ -13,11 +14,11 @@ export async function handleLinearSync(
   webview: vscode.Webview,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('genouk');
-  const apiKey = config.get<string>('linearApiKey');
+  const apiKey = await getSecret('linear');
   const teamId = config.get<string>('linearTeamId');
 
   if (!apiKey || !teamId) {
-    vscode.window.showErrorMessage('Please configure genouk.linearApiKey and genouk.linearTeamId in settings.');
+    vscode.window.showErrorMessage('Set your Linear key via "Genouk: Set API Key" and configure genouk.linearTeamId in settings.');
     webview.postMessage({ type: 'syncToLinearResult', value: { success: false } });
     return;
   }

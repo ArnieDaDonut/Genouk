@@ -67,8 +67,26 @@ export class PlannerPanel {
             panel.webview.postMessage({ type: 'error', value: error.message });
           }
           break;
+        case 'extendSessionPlan': {
+          if (!data.value) return;
+          try {
+            await store.extend(data.value);
+          } catch (error: any) {
+            panel.webview.postMessage({ type: 'error', value: error.message });
+          } finally {
+            panel.webview.postMessage({ type: 'extendSessionPlanDone' });
+          }
+          break;
+        }
         case 'syncToLinear': {
           await handleLinearSync(store, panel.webview);
+          break;
+        }
+        case 'copyText': {
+          if (typeof data.value === 'string') {
+            await vscode.env.clipboard.writeText(data.value);
+            vscode.window.showInformationMessage(data.label ? `${data.label} copied to clipboard.` : 'Copied to clipboard.');
+          }
           break;
         }
       }

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import Groq from 'groq-sdk';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import { getSecret } from './secrets';
 import { log } from './log';
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -15,12 +15,19 @@ export interface GenerateOptions {
   model?: string;
 }
 
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash';
-const DEFAULT_VULTR_MODEL = 'llama-2-70b-chat-Q5_K_M';
+const DEFAULT_VULTR_MODEL = 'nvidia/DeepSeek-V3.2-NVFP4';
 const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
+
+// When the configured model is gone (Vultr rotates its catalogue), fall back to
+// the first of these that the live /models list still serves.
+const VULTR_FALLBACK_PRIORITY = [
+  'nvidia/DeepSeek-V3.2-NVFP4',
+  'moonshotai/Kimi-K2.6',
+  'zai-org/GLM-5.1-FP8',
+  'MiniMaxAI/MiniMax-M2.7',
+];
 
 /** One backend Genouk can call. Tried in order; the first that succeeds wins. */
 interface Provider {
@@ -35,31 +42,13 @@ interface ResolvedOptions {
 }
 
 /**
- * Single entry point for all model calls. It keeps an ordered list of free
- * providers and falls through to the next one whenever a call fails (rate
- * limits, outages, missing keys). Vultr is primary; Groq and Gemini are
- * fallbacks. Callers are unchanged - they still call
- * `getInstance().generateContent(...)`.
+ * Single entry point for all model calls. Genouk runs on Vultr Serverless
+ * Inference. Callers go through `getInstance().generateContent(...)`.
  */
 export class AIProvider {
   private static instance: AIProvider;
-  private vultrKey?: string;
-  private groq?: Groq;
-  private geminiKey?: string;
 
-  private constructor() {
-    this.initialize();
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (
-        e.affectsConfiguration('genouk.vultrApiKey') ||
-        e.affectsConfiguration('genouk.vultrModel') ||
-        e.affectsConfiguration('genouk.groqApiKey') ||
-        e.affectsConfiguration('genouk.geminiApiKey')
-      ) {
-        this.initialize();
-      }
-    });
-  }
+  private constructor() {}
 
   public static getInstance(): AIProvider {
     if (!AIProvider.instance) {
@@ -68,61 +57,23 @@ export class AIProvider {
     return AIProvider.instance;
   }
 
-  private initialize() {
-    const config = vscode.workspace.getConfiguration('genouk');
-
-    this.vultrKey = readSecret(process.env.VULTR_API_KEY) || readSecret(config.get<string>('vultrApiKey'));
-
-    const groqKey = config.get<string>('groqApiKey') || process.env.GROQ_API_KEY;
-    // maxRetries: the SDK retries 429/5xx with exponential backoff and honors
-    // the Retry-After header — bumped from the default 2 so a brief rate-limit
-    // spike self-heals before we fall through to Gemini.
-    this.groq = groqKey ? new Groq({ apiKey: groqKey, maxRetries: 4 }) : undefined;
-
-    this.geminiKey = config.get<string>('geminiApiKey') || process.env.GEMINI_API_KEY || undefined;
-  }
-
-  /** Providers to try, in order, given the keys currently configured. */
-  private providers(): Provider[] {
+  /**
+   * The configured provider (Vultr), or an empty list if no key is set. The key is
+   * resolved from SecretStorage (then legacy settings, then env) on each call so a
+   * freshly-set key is picked up immediately with no restart.
+   */
+  private async providers(): Promise<Provider[]> {
     const config = vscode.workspace.getConfiguration('genouk');
     const list: Provider[] = [];
 
-    if (this.vultrKey) {
-      const key = this.vultrKey;
-      const vultrModel = readConfig(process.env.VULTR_MODEL) || readConfig(config.get<string>('vultrModel')) || DEFAULT_VULTR_MODEL;
+    const vultrKey = await getSecret('vultr');
+    if (vultrKey) {
+      const key = vultrKey;
+      const vultrModel = config.get<string>('vultrModel') || process.env.VULTR_MODEL || DEFAULT_VULTR_MODEL;
       list.push({
         name: 'Vultr',
         generate: (userContent, systemContent, opts) =>
-          callVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
-      });
-    }
-
-    if (this.groq) {
-      const groq = this.groq;
-      const groqModel = config.get<string>('model') || DEFAULT_MODEL;
-      list.push({
-        name: 'Groq',
-        generate: async (userContent, systemContent, opts) => {
-          const messages: { role: 'system' | 'user'; content: string }[] = [];
-          if (systemContent) messages.push({ role: 'system', content: systemContent });
-          messages.push({ role: 'user', content: userContent });
-          const completion = await groq.chat.completions.create({
-            model: opts.model ?? groqModel,
-            messages,
-            max_tokens: opts.maxTokens,
-            temperature: opts.temperature,
-          });
-          return completion.choices[0]?.message?.content ?? '';
-        },
-      });
-    }
-
-    if (this.geminiKey) {
-      const key = this.geminiKey;
-      const geminiModel = config.get<string>('geminiModel') || DEFAULT_GEMINI_MODEL;
-      list.push({
-        name: 'Gemini',
-        generate: (userContent, systemContent, opts) => callGemini(key, geminiModel, userContent, systemContent, opts),
+          generateVultr(key, opts.model ?? vultrModel, userContent, systemContent, opts),
       });
     }
 
@@ -146,15 +97,13 @@ export class AIProvider {
       model: options.model,
     };
 
-    const providers = this.providers();
+    const providers = await this.providers();
     if (providers.length === 0) {
       throw new Error(
-        'No AI provider is configured. Add a Vultr key (genouk.vultrApiKey), Groq key (genouk.groqApiKey), or Gemini key (genouk.geminiApiKey) in settings.',
+        'No AI provider is configured. Run the "Genouk: Set API Key" command to add a Vultr key.',
       );
     }
 
-    // Collect every provider's failure so the surfaced error explains the whole
-    // fallback chain, not just the last hop (e.g. "Groq failed AND Gemini failed").
     const failures: string[] = [];
     for (const provider of providers) {
       try {
@@ -186,19 +135,78 @@ function shorten(msg: string): string {
   return text.length > 200 ? text.slice(0, 200) + '…' : text;
 }
 
-function readConfig(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.replace(/^['"]|['"]$/g, '');
+// Cached /models list (Vultr's catalogue changes rarely; refresh every 5 min).
+let modelListCache: { ids: string[]; at: number } | null = null;
+// Remembers a working substitute once a configured model turns out to be gone,
+// so subsequent calls skip the failed attempt entirely.
+const resolvedModels = new Map<string, string>();
+
+/** Fetch the ids Vultr currently serves, cached. Returns [] (last good) on failure. */
+async function listVultrModels(apiKey: string): Promise<string[]> {
+  const now = Date.now();
+  if (modelListCache && now - modelListCache.at < 5 * 60 * 1000) return modelListCache.ids;
+  try {
+    const res = await fetch(`${VULTR_BASE_URL}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return modelListCache?.ids ?? [];
+    const data = (await res.json()) as { data?: { id?: string; object?: string }[] };
+    const ids = (data.data ?? [])
+      .filter((m) => m.object === 'model' && typeof m.id === 'string')
+      .map((m) => m.id as string);
+    modelListCache = { ids, at: now };
+    return ids;
+  } catch {
+    return modelListCache?.ids ?? [];
+  }
 }
 
-function readSecret(value: string | undefined): string | undefined {
-  return readConfig(value)?.replace(/^Bearer\s+/i, '');
+/** Pick a valid chat model from the live list, preferring our priority order. */
+async function pickValidModel(apiKey: string, exclude: string): Promise<string | null> {
+  const ids = await listVultrModels(apiKey);
+  if (ids.length === 0) return null;
+  const available = new Set(ids);
+  for (const candidate of VULTR_FALLBACK_PRIORITY) {
+    if (candidate !== exclude && available.has(candidate)) return candidate;
+  }
+  // No preferred model available — take any general model (skip safety/guard ones).
+  return ids.find((id) => id !== exclude && !/safety|guard|content/i.test(id)) ?? null;
+}
+
+/** Auth/quota failures won't be fixed by swapping the model; everything else can be. */
+function isModelSwappable(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  return status !== 401 && status !== 403 && status !== 429;
 }
 
 /**
- * Call Vultr Serverless Inference via its OpenAI-compatible chat completions API.
- * Keeping this as a direct fetch avoids adding another SDK to the extension bundle.
+ * Call Vultr, and if the configured model is unavailable (or its engine errors),
+ * resolve a valid model from the live /models list and retry once — caching the
+ * substitute so the next call goes straight to the working model.
+ */
+async function generateVultr(
+  apiKey: string,
+  desiredModel: string,
+  userContent: string,
+  systemContent: string | undefined,
+  opts: ResolvedOptions,
+): Promise<string> {
+  const model = resolvedModels.get(desiredModel) ?? desiredModel;
+  try {
+    return await callVultr(apiKey, model, userContent, systemContent, opts);
+  } catch (err) {
+    if (!isModelSwappable(err)) throw err;
+    const fallback = await pickValidModel(apiKey, model);
+    if (!fallback || fallback === model) throw err;
+    log(`Vultr model '${model}' unavailable — falling back to '${fallback}'.`);
+    resolvedModels.set(desiredModel, fallback);
+    return await callVultr(apiKey, fallback, userContent, systemContent, opts);
+  }
+}
+
+/**
+ * Call Vultr Serverless Inference. Its chat API is OpenAI-compatible, so a plain
+ * fetch is all we need — no SDK. Endpoint and auth per Vultr's inference docs.
  */
 async function callVultr(
   apiKey: string,
@@ -226,49 +234,17 @@ async function callVultr(
   });
 
   if (!res.ok) {
-    throw new Error(`Vultr ${res.status}: ${await res.text()}`);
+    const err = new Error(`Vultr ${res.status}: ${await res.text()}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
 
+  // Some Vultr-hosted models are reasoning models: when the final answer is
+  // short they may leave `content` null and put text under `reasoning`. Fall
+  // back to it so we never return an empty string from a successful call.
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string | null; reasoning?: string | null } }[];
   };
-  return data.choices?.[0]?.message?.content ?? '';
-}
-
-/**
- * Call the Gemini REST API directly via fetch. We deliberately avoid the
- * `@google/genai` SDK: it pulls in Google's auth stack, websockets, and stream
- * polyfills (~1.5MB bundled) for what is a single JSON POST. Node 18+ (our
- * target) ships a global `fetch`.
- */
-async function callGemini(
-  apiKey: string,
-  model: string,
-  userContent: string,
-  systemContent: string | undefined,
-  opts: ResolvedOptions,
-): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body: Record<string, unknown> = {
-    contents: [{ parts: [{ text: userContent }] }],
-    generationConfig: { maxOutputTokens: opts.maxTokens, temperature: opts.temperature },
-  };
-  if (systemContent) {
-    body.system_instruction = { parts: [{ text: systemContent }] };
-  }
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-  }
-
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
+  const msg = data.choices?.[0]?.message;
+  return msg?.content ?? msg?.reasoning ?? '';
 }
