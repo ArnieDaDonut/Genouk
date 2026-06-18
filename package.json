@@ -2,7 +2,7 @@
   "name": "genouk",
   "displayName": "Genouk",
   "description": "Genouk AI Assistant for prompt engineering and review",
-  "version": "0.0.1",
+  "version": "1.0.1",
   "publisher": "genouk-dev",
   "license": "MIT",
   "engines": {
