@@ -4,11 +4,20 @@ An AI-powered VS Code extension used to accelerate programmer workflows. AI Assi
 
 ## Features
 
+<img width="1512" height="982" alt="Image" src="https://github.com/user-attachments/assets/01af83f6-3cd7-475d-b234-9d0038cc8a44" />
+
+
 AI Prompt Reviewer - Integrated with Vultr, reviews and rewrites your prompts with context from your repository.
+
+<img width="842" height="890" alt="Image" src="https://github.com/user-attachments/assets/5efb827c-3614-436e-9e8c-3613d7fa85b4" />
 
 Repository Tours - Automatically reads and creates tours and interactive stops from files within the repository to help you quickly understand an unfamiliar repository.
 
+<img width="1512" height="982" alt="Image" src="https://github.com/user-attachments/assets/9199c60a-3358-4bb7-a092-578e84c708ca" />
+
 Session Planner - A popout planner window that generates a structured to-do list that can also be synced straight to your Linear account.
+
+<img width="1512" height="982" alt="Image" src="https://github.com/user-attachments/assets/5f5c8fcb-3ed3-4085-a89c-9d0a2892715a" />
 
 Cross-Chat Memory - Genouk stores information with chats in Claude Code, ensuring no information is lost between sessions.
 
