@@ -42,7 +42,9 @@ Each missing dimension (language/framework, target file/area, output format, con
 "tokenIssues" must be specific, concrete findings (e.g. 'No target file named — model must guess where this React component lives'), not generic advice.
 "isFinished" is true only when the prompt is already strong (score >= 90) and needs no rewrite.
 
-Reply with ONLY a valid JSON object, no markdown fences:
+CRITICAL: Your entire response must be a single JSON object. Do NOT output reasoning, thinking, analysis, or any text before or after the JSON. Start your response with { and end with }.
+
+Reply with ONLY this JSON structure:
 {"score":number,"feedback":"string","tokenIssues":["string"],"isFinished":boolean}`;
 
 // Phase 2 — heavier. The full production-grade rewrite plus optional suggestions.
@@ -64,7 +66,9 @@ Be precise but tight: include every constraint that removes ambiguity, but say e
 2. CODEBASE improvements unrelated to the prompt — things you noticed in the REPOSITORY CONTEXT that would benefit the code overall regardless of this task: missing tests, an absent lint/format setup, risky or outdated dependencies, an empty README, dead/duplicated areas, weak error handling, missing types, build/CI gaps, etc. Prefix these with "Codebase: " so they are visually distinct, e.g. "Codebase: there's no lint script wired up — adding ESLint would catch issues npm run compile misses".
 Make every suggestion specific to THIS prompt and repo, grounded in the actual context (filenames, deps, commits). No generic advice. It is fine for some or all suggestions to be of kind 2 if the prompt itself needs little, but always include at least one codebase-improvement idea when the context reveals one.
 
-Reply with ONLY a valid JSON object, no markdown fences:
+CRITICAL: Your entire response must be a single JSON object. Do NOT output reasoning, thinking, analysis, or any text before or after the JSON. Start your response with { and end with }.
+
+Reply with ONLY this JSON structure:
 {"improvedPrompt":"string","suggestions":["string"]}`;
 
 function parseJson(resultText: string): any {
@@ -131,8 +135,9 @@ export class PromptReviewer {
     // Low temperature keeps the score stable run-to-run (same prompt → same score)
     // and trims sampling latency.
     const resultText = await ai.generateContent(userContent, ASSESS_SYSTEM, {
-      maxTokens: 900,
+      maxTokens: 2048,
       temperature: 0.1,
+      jsonMode: true,
     });
 
     try {
@@ -166,7 +171,8 @@ export class PromptReviewer {
     // instruction in REWRITE_SYSTEM, it keeps the rewrite snappy on Vultr's reasoning
     // model without truncating a real answer (parseJson also repairs a cut-off object).
     const resultText = await ai.generateContent(userContent, REWRITE_SYSTEM, {
-      maxTokens: 2000,
+      maxTokens: 4096,
+      jsonMode: true,
     });
 
     try {

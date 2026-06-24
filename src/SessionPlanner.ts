@@ -37,10 +37,12 @@ Each task must have:
 - Difficulty level: "easy", "medium", or "hard"
 - Default status: "todo"
 
-Respond ONLY with a valid JSON object matching this schema (no markdown, no prose):
+CRITICAL: Your entire response must be a single JSON object. Do NOT output reasoning, thinking, analysis, or any text before or after the JSON. Start your response with { and end with }.
+
+Respond with ONLY a valid JSON object matching this schema:
 ${PLAN_SCHEMA}`;
 
-    const resultText = await ai.generateContent(`User's Coding Goal:\n${goal}`, systemPrompt);
+    const resultText = await ai.generateContent(`User's Coding Goal:\n${goal}`, systemPrompt, { jsonMode: true });
     const raw = parsePlanJson(resultText);
     return normalizePlan(raw, goal);
   }
@@ -57,7 +59,9 @@ ${PLAN_SCHEMA}`;
 The user already has a session plan and wants to add more tasks to it.
 Generate ONLY new tasks that are not already covered. Do not repeat existing tasks.
 
-Respond ONLY with a valid JSON object: { "tasks": [ { "id", "title", "description", "estimatedMinutes", "difficulty", "status": "todo" } ] }`;
+Respond ONLY with a valid JSON object: { "tasks": [ { "id", "title", "description", "estimatedMinutes", "difficulty", "status": "todo" } ] }
+
+CRITICAL: Your entire response must be a single JSON object. Do NOT output reasoning, thinking, or analysis. Start with { and end with }.`;
 
     const userPrompt = `Session goal: ${plan.goal}
 
@@ -66,7 +70,7 @@ ${existing || '(none yet)'}
 
 What to add: ${instruction}`;
 
-    const resultText = await ai.generateContent(userPrompt, systemPrompt);
+    const resultText = await ai.generateContent(userPrompt, systemPrompt, { jsonMode: true });
     const raw = parsePlanJson(resultText);
     const existingIds = new Set(plan.tasks.map((task) => task.id));
     return normalizeTasks(raw?.tasks, existingIds, 'add');

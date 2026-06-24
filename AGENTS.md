@@ -174,4 +174,68 @@ Built and tested the genouk-memory MCP server. Verified save/recall carries cont
 - Try it from a real agent (Cursor/Claude Code)
 
 > When you finish a meaningful chunk of work, call `save_context` (genouk-memory MCP) so the next chat carries it forward.
-<!-- GENOUK:MEMORY:END 
+<!-- GENOUK:MEMORY:END
+
+<!-- GENOUK:MEMORY:START -->
+## ⏳ Cross-chat memory — carried over from past chats
+
+_Genouk keeps this section in sync from past Genouk chat digests — don't edit it by hand._
+
+**Last session:** Reframed Memory tab around the CLAUDE.md text-file carry-over (6/14/2026, 6:20:45 AM)
+
+**✅ No open threads carried over** — past sessions closed cleanly.
+
+### Recent sessions (3)
+
+#### Reframed Memory tab around the CLAUDE.md text-file carry-over
+_6/14/2026, 6:20:45 AM_
+
+Updated Genouk's Memory tab to reflect that cross-chat recall now rides on the auto-loaded CLAUDE.md block rather than the MCP server. Added memoryFilePath + memoryFileWritten to MemoryData/getMemoryData (getMemoryData now refreshes the block on load so the 'CLAUDE.md synced' badge is truthful). Rewrote MemoryTab.tsx: intro now leads with automatic carry-over, a new Carry-over card shows a green 'CLAUDE.md synced' status, the .mcp.json setup is demoted to a collapsible 'Saving new sessions (optional)' section, and remembered facts are now surfaced read-only (good for the secret-word demo). Kept the tab (decided it's a strong demo surface) rather than removing it. Typecheck + bundle pass.
+
+**Decisions:**
+- Keep the Memory tab but reframe it around CLAUDE.md carry-over instead of MCP plumbing
+- getMemoryData refreshes the CLAUDE.md block on load so the synced badge always reflects reality (no-op write when unchanged)
+- Demote .mcp.json setup to a collapsed 'optional saving' section since recall no longer needs it
+- Surface remembered facts in the tab read-only
+
+**Files touched:**
+- src/shared/types.ts
+- src/sidebar/MemoryService.ts
+- src/webviews/genouk-app/MemoryTab.tsx
+
+#### Added text-file (CLAUDE.md) path for cross-chat carry-over
+_6/14/2026, 5:59:26 AM_
+
+The MCP-only carry-over was unreliable because it depended on the agent choosing to call recall_context at chat start. Added a text-file path: a new renderCarryover() + syncCarryoverFile() in the vscode-free sessionMemoryStore writes the facts/open-threads/recent-digests briefing into a managed <!-- GENOUK:MEMORY:START/END --> block in the repo's CLAUDE.md, which Claude Code/Cursor auto-load every session with zero tool calls. MCP server now refreshes the block on save_context/update_context/remember/forget; MemoryService.syncMemoryFile() refreshes it on activation (ensureConfig) and on tab mutations. MCP kept for the write/save side only. Verified renderer output against the real stored digest, confirmed the block writes idempotently into CLAUDE.md, typecheck + bundle pass.
+
+**Decisions:**
+- Keep the genouk-memory MCP server for SAVING digests; replace the RECALL path with an auto-loaded CLAUDE.md managed block
+- Block fenced by <!-- GENOUK:MEMORY:START/END --> markers, rewritten in place so the rest of CLAUDE.md is preserved
+- Block-writing logic lives in vscode-free sessionMemoryStore.ts so both the extension host and the standalone MCP server can keep CLAUDE.md current
+- MCP server refreshes CLAUDE.md the instant a session is saved, so carry-over is current without waiting for the extension to reactivate
+
+**Files touched:**
+- src/memory/sessionMemoryStore.ts
+- src/memory/mcpServer.ts
+- src/sidebar/MemoryService.ts
+- CLAUDE.md
+
+#### DEMO: tried out cross-chat memory
+_6/13/2026, 5:52:06 PM_
+
+Built and tested the genouk-memory MCP server. Verified save/recall carries context between separate chats.
+
+**Decisions:**
+- Memory is keyed per-repo via GENOUK_REPO
+- Agent writes the digest itself (no extra API key)
+
+**Files touched:**
+- src/memory/mcpServer.ts
+- src/memory/sessionMemoryStore.ts
+
+**Open threads:**
+- Wire the same rule into CLAUDE.md
+- Try it from a real agent (Cursor/Claude Code)
+
+> When you finish a meaningful chunk of work, call `save_context` (genouk-memory MCP) so the next chat carries it forward.
+<!-- GENOUK:MEMORY:END -->

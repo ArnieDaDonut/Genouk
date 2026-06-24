@@ -3,5 +3,17 @@
     "allow": [
       "Bash(npm uninstall *)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/sameetmandewalker/.vscode/extensions/genouk-dev.genouk-1.0.1/dist/stopHook.js\""
+          }
+        ]
+      }
+    ]
   }
 }

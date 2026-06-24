@@ -169,7 +169,9 @@ Produce a tour with these parts:
   - "what": plain-language explanation of what this area does and why it exists.
   - "how": how it works — the key functions/classes involved and the flow between them.
 
-Reply with ONLY a valid JSON object, no markdown fences:
+CRITICAL: Your entire response must be a single JSON object. Do NOT output reasoning, thinking, analysis, or any text before or after the JSON. Start your response with { and end with }.
+
+Reply with ONLY this JSON structure:
 {"summary":"string","inferred":boolean,"architecture":"string","techStack":["string"],"stops":[{"title":"string","file":"string","symbol":"string","relatedFiles":["string"],"what":"string","how":"string"}]}`;
 
 export class CodebaseTourGenerator {
@@ -187,7 +189,7 @@ export class CodebaseTourGenerator {
 
     const userContent = `${intent}\n\n${context}`;
     const ai = AIProvider.getInstance();
-    const resultText = await ai.generateContent(userContent, SYSTEM_PROMPT, { maxTokens: 4096 });
+    const resultText = await ai.generateContent(userContent, SYSTEM_PROMPT, { maxTokens: 4096, jsonMode: true });
     log(`Tour: model returned ${resultText.length} chars.`);
 
     const cleaned = resultText.replace(/```json/gi, '').replace(/```/g, '').trim();

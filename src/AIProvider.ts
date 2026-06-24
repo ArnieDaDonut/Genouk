@@ -13,20 +13,26 @@ export interface GenerateOptions {
   temperature?: number;
   /** Override the configured model for this call. */
   model?: string;
+  /** When true, sends `response_format: { type: 'json_object' }` to force valid JSON output. */
+  jsonMode?: boolean;
 }
 
-const DEFAULT_VULTR_MODEL = 'nvidia/DeepSeek-V3.2-NVFP4';
+const DEFAULT_VULTR_MODEL = 'MiniMaxAI/MiniMax-M2.7';
 const VULTR_BASE_URL = 'https://api.vultrinference.com/v1';
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_TEMPERATURE = 0.4;
 
 // When the configured model is gone (Vultr rotates its catalogue), fall back to
 // the first of these that the live /models list still serves.
+// Ordered by empirical JSON compliance: MiniMax properly separates content from
+// reasoning; the others put everything in the reasoning field.
 const VULTR_FALLBACK_PRIORITY = [
-  'nvidia/DeepSeek-V3.2-NVFP4',
-  'moonshotai/Kimi-K2.6',
-  'zai-org/GLM-5.1-FP8',
   'MiniMaxAI/MiniMax-M2.7',
+  'deepseek-ai/DeepSeek-V4-Flash',
+  'moonshotai/Kimi-K2.6',
+  'Qwen/Qwen3.5-397B-A17B',
+  'zai-org/GLM-5.1-FP8',
+  'nvidia/DeepSeek-V3.2-NVFP4',
 ];
 
 /** One backend Genouk can call. Tried in order; the first that succeeds wins. */
@@ -39,6 +45,7 @@ interface ResolvedOptions {
   maxTokens: number;
   temperature: number;
   model?: string;
+  jsonMode: boolean;
 }
 
 /**
@@ -95,6 +102,7 @@ export class AIProvider {
       maxTokens: options.maxTokens ?? config.get<number>('maxTokens') ?? DEFAULT_MAX_TOKENS,
       temperature: options.temperature ?? config.get<number>('temperature') ?? DEFAULT_TEMPERATURE,
       model: options.model,
+      jsonMode: options.jsonMode ?? false,
     };
 
     const providers = await this.providers();
@@ -205,6 +213,18 @@ async function generateVultr(
 }
 
 /**
+ * Reasoning models (DeepSeek, Kimi, etc.) emit chain-of-thought wrapped in
+ * <think>…</think> (or <reasoning>…</reasoning>) before the real answer.
+ * Strip those blocks so downstream JSON parsers only see the actual output.
+ */
+function stripThinkingTokens(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+    .trim();
+}
+
+/**
  * Call Vultr Serverless Inference. Its chat API is OpenAI-compatible, so a plain
  * fetch is all we need — no SDK. Endpoint and auth per Vultr's inference docs.
  */
@@ -230,6 +250,7 @@ async function callVultr(
       messages,
       max_tokens: opts.maxTokens,
       temperature: opts.temperature,
+      ...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
 
@@ -239,12 +260,67 @@ async function callVultr(
     throw err;
   }
 
-  // Some Vultr-hosted models are reasoning models: when the final answer is
-  // short they may leave `content` null and put text under `reasoning`. Fall
-  // back to it so we never return an empty string from a successful call.
+  // Reasoning models (DeepSeek, Kimi, etc.) may separate thinking from the
+  // final answer using various field names. Read all of them so we never miss
+  // the actual output.
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string | null; reasoning?: string | null } }[];
+    choices?: {
+      message?: {
+        content?: string | null;
+        reasoning?: string | null;
+        reasoning_content?: string | null;
+      };
+    }[];
   };
   const msg = data.choices?.[0]?.message;
-  return msg?.content ?? msg?.reasoning ?? '';
+
+  const content = msg?.content?.trim() ?? '';
+  const reasoning = (msg?.reasoning_content ?? msg?.reasoning ?? '').trim();
+
+  // Log the field presence so debugging is instant if parsing fails again.
+  log(`Vultr response — content: ${content.length} chars, reasoning: ${reasoning.length} chars, jsonMode: ${opts.jsonMode}`);
+
+  // When jsonMode is on, pick the field that actually holds JSON.
+  // Reasoning models often put CoT in content and JSON in reasoning_content,
+  // or vice-versa. Prefer whichever starts with '{'.
+  if (opts.jsonMode) {
+    if (content.startsWith('{')) return stripThinkingTokens(content);
+    if (reasoning.startsWith('{')) return stripThinkingTokens(reasoning);
+
+    // Neither field starts with '{' — try to extract a JSON object from either.
+    const fromContent = extractFirstJson(content);
+    if (fromContent) return fromContent;
+    const fromReasoning = extractFirstJson(reasoning);
+    if (fromReasoning) return fromReasoning;
+
+    // Last resort: return whichever is non-empty (parseJson in callers will
+    // attempt repair). Prefer content.
+    log('Vultr response — WARNING: jsonMode requested but no JSON object found in either field.');
+  }
+
+  const raw = content || reasoning;
+  return stripThinkingTokens(raw);
+}
+
+/** Try to pull the first balanced JSON object out of a string of mixed text. */
+function extractFirstJson(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }
