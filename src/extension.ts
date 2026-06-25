@@ -3,7 +3,7 @@ import { GenoukSidebarProvider } from './GenoukSidebarProvider';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
 
-import { LinearService } from './LinearService';
+import { loadLinear } from './linearLoader';
 import { TodoScanner } from './TodoScanner';
 import { initSecrets, migrateSettingsKeysToSecrets, promptToSetApiKey, getSecret } from './secrets';
 import { playSystemNotification } from './sidebar/AgentActivityMonitor';
@@ -82,7 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
             const title = `[Genouk] ${todo.type} in ${fileName}`;
             const description = `${todo.text}\n\nFile: \`${document.fileName}\`\nLine: ${todo.range.start.line + 1}`;
             
-            const issueKey = await LinearService.createIssueFromTodo(title, description, apiKey, teamId);
+            const issueKey = await loadLinear().LinearService.createIssueFromTodo(title, description, apiKey, teamId);
             
             const replacementSeparator = todo.match4 || ': ';
             const replacementText = `${todo.match1} [${issueKey}]${replacementSeparator}${todo.match5}`;

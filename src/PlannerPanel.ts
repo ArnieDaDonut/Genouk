@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { SessionStore } from './SessionStore';
 import { plannerHtml } from './webviewHtml';
-import { handleLinearSync } from './LinearService';
+import { loadLinear } from './linearLoader';
 
 /**
  * The popout Planner. A singleton WebviewPanel opened beside the editor (and
@@ -79,7 +79,7 @@ export class PlannerPanel {
           break;
         }
         case 'syncToLinear': {
-          await handleLinearSync(store, panel.webview);
+          await loadLinear().handleLinearSync(store, panel.webview);
           break;
         }
         case 'copyText': {

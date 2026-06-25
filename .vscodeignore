@@ -6,3 +6,20 @@ test
 esbuild.config.js
 tsconfig.json
 .eslintrc.json
+
+# Dev-only files and scratch artifacts that should never ship.
+.claude
+.vscode
+.gitignore
+tmp
+**/*.vsix
+random_stuff.txt
+TECH_STACK.md
+AGENTS.md
+CLAUDE.md
+
+# Intentionally ship the shared Vultr key with the extension so it works out of
+# the box for everyone. Negation keeps .env in the package even if a future
+# broad ignore pattern would otherwise drop it. Packaging still needs the
+# --allow-package-env-file --allow-package-all-secrets flags (see README).
+!.env

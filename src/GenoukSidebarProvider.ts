@@ -3,7 +3,7 @@ import { PromptReviewer } from './PromptReviewer';
 import { CodebaseTourGenerator } from './CodebaseTour';
 import { SessionStore } from './SessionStore';
 import { PlannerPanel } from './PlannerPanel';
-import { handleLinearSync } from './LinearService';
+import { loadLinear } from './linearLoader';
 import { getNonce } from './webviewHtml';
 import { getSecret } from './secrets';
 import { log } from './log';
@@ -129,7 +129,7 @@ export class GenoukSidebarProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'syncToLinear': {
-          await handleLinearSync(this._store, webviewView.webview);
+          await loadLinear().handleLinearSync(this._store, webviewView.webview);
           break;
         }
         case 'copyText': {
